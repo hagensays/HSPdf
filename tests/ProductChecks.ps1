@@ -21,7 +21,8 @@ foreach ($requiredReference in @('System.Runtime.WindowsRuntime', 'WindowsWinMdP
     }
 }
 foreach ($compileFile in @('MainWindow.Printing.cs', 'MainWindow.Features.cs', 'PdfAttachmentScanner.cs')) {
-    if (-not $project.Contains("<Compile Include=\"$compileFile\"")) {
+    $compileFragment = '<Compile Include="{0}"' -f $compileFile
+    if (-not $project.Contains($compileFragment)) {
         throw "HSPdf project must compile $compileFile."
     }
 }
