@@ -67,9 +67,10 @@ foreach ($legacy in @('Regex.Matches', 'DeflateStream', '"/ObjStm"', 'DecodeStre
 }
 
 $bridge = Get-Content (Join-Path $root 'vendor\pdfium\bridge\hspdf_bridge.cpp') -Raw
-foreach ($fragment in @('std::recursive_mutex', 'FPDF_LoadCustomDocument', 'FPDF_LoadMemDocument64', 'FPDF_GetPageSizeByIndexF', 'FPDF_RenderPageBitmap', 'FPDF_PRINTING', 'FPDFDoc_GetAttachmentCount', 'FPDFAttachment_GetFile', 'FILE_SHARE_DELETE')) {
+foreach ($fragment in @('SRWLOCK g_pdfium_lock = SRWLOCK_INIT', 'AcquireSRWLockExclusive', 'ReleaseSRWLockExclusive', 'FPDF_LoadCustomDocument', 'FPDF_LoadMemDocument64', 'FPDF_GetPageSizeByIndexF', 'FPDF_RenderPageBitmap', 'FPDF_PRINTING', 'FPDFDoc_GetAttachmentCount', 'FPDFAttachment_GetFile', 'FILE_SHARE_DELETE')) {
     if (-not $bridge.Contains($fragment)) { throw "Native PDFium bridge invariant missing: $fragment" }
 }
+if ($bridge.Contains('std::recursive_mutex') -or $bridge.Contains('catch (...)')) { throw 'Native PDFium bridge must remain compatible with Chromium no-exception/no-exit-destructor build flags.' }
 
 $pin = (Get-Content (Join-Path $root 'vendor\pdfium\PDFIUM_COMMIT.txt') -Raw).Trim()
 if ($pin -notmatch '^[0-9a-f]{40}$') { throw 'PDFium must be pinned to an exact 40-character commit.' }
