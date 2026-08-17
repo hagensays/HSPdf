@@ -141,15 +141,16 @@ jobs:
         run: |
           $tag = '${{ steps.version.outputs.tag }}'
           $name = '${{ steps.app.outputs.name }}'.Trim()
-          gh release create $tag \
-            "artifacts\release\$name-$tag.exe" \
-            "artifacts\release\$name-$tag.exe.sha256" \
-            "artifacts\release\$name-$tag.zip" \
-            "artifacts\release\pdfium.dll" \
-            "artifacts\release\pdfium.dll.sha256" \
-            "artifacts\release\PDFium-LICENSES.txt" \
-            "artifacts\release\PDFium-BUILD.txt" \
-            --verify-tag --title "$name $tag" --notes "PDFium-powered HSPdf release from merged PR #${{ github.event.pull_request.number }}."
+          $assets = @(
+            "artifacts\release\$name-$tag.exe",
+            "artifacts\release\$name-$tag.exe.sha256",
+            "artifacts\release\$name-$tag.zip",
+            'artifacts\release\pdfium.dll',
+            'artifacts\release\pdfium.dll.sha256',
+            'artifacts\release\PDFium-LICENSES.txt',
+            'artifacts\release\PDFium-BUILD.txt'
+          )
+          gh release create $tag @assets --verify-tag --title "$name $tag" --notes "PDFium-powered HSPdf release from merged PR #${{ github.event.pull_request.number }}."
           if ($LASTEXITCODE -ne 0) { throw "GitHub Release creation failed for $tag." }
 
       - name: Verify release, tag and assets
