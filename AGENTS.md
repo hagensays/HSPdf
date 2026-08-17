@@ -43,8 +43,10 @@ For every code change:
 - Keep the distributed application self-contained as a single EXE; Windows SDK metadata is build-time only and must not be packaged.
 - Do not add network access, telemetry, update checks, cloud features or account features.
 - Keep PDF rendering bounded: maximum requested zoom is 400% and the bitmap cache must remain small.
-- Prefer one rendered page at a time. Do not eagerly rasterize an entire document.
-- Password entry, text extraction/search, annotations and editing are outside v0.1.0 unless explicitly requested later.
+- Prefer one rendered page at a time. Do not eagerly rasterize an entire document for normal viewing.
+- Printing may rasterize pages on demand in memory for the standard Windows print pipeline, but must not create intermediate files.
+- The folder companion list may enumerate only PDFs in the opened PDF's directory and must not recurse into subfolders.
+- Password entry, text extraction/search, annotations and editing remain outside scope unless explicitly requested later.
 
 ## Naming
 
