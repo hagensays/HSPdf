@@ -17,8 +17,11 @@ if ($project -match '<PackageReference') {
 }
 foreach ($requiredReference in @('System.Runtime.WindowsRuntime', 'WindowsWinMdPath', '<Reference Include="Windows"', '<Reference Include="ReachFramework"')) {
     if (-not $project.Contains($requiredReference)) {
-        throw "HSPdf project is missing required reader/print build reference '$requiredReference'."
+        throw "HSPdf project is missing required reader/legacy-print build reference '$requiredReference'."
     }
+}
+if (-not $project.Contains('<Compile Include="MainWindow.Printing.cs">')) {
+    throw 'HSPdf project must compile the active original-PDF print routing.'
 }
 
 $sourceFiles = Get-ChildItem $sourceRoot -Recurse -File | Where-Object { $_.Extension -in '.cs', '.xaml' }
@@ -33,9 +36,9 @@ foreach ($needle in @('File.Delete(', 'File.Move(', 'File.WriteAll', 'FileAccess
     }
 }
 
-foreach ($required in @('Themes\Colors.xaml', 'Themes\Controls.xaml', 'MainWindow.xaml')) {
+foreach ($required in @('Themes\Colors.xaml', 'Themes\Controls.xaml', 'MainWindow.xaml', 'MainWindow.Printing.cs')) {
     if (-not (Test-Path (Join-Path $sourceRoot $required))) {
-        throw "Required suite UI file missing: $required"
+        throw "Required HSPdf file missing: $required"
     }
 }
 
@@ -47,13 +50,27 @@ foreach ($fragment in @(
     'MaximumZoom = 4.0',
     'Directory.EnumerateFiles',
     'SearchOption.TopDirectoryOnly',
-    'PrintDialog',
-    'PdfPrintPaginator',
     '_viewMode == ViewMode.FitHeight'
 )) {
     if (-not $readerSource.Contains($fragment)) {
         throw "HSPdf reader invariant missing: $fragment"
     }
+}
+
+$printingSource = Get-Content (Join-Path $sourceRoot 'MainWindow.Printing.cs') -Raw
+foreach ($fragment in @(
+    'Verb = "print"',
+    'UseShellExecute = true',
+    'FileName = _documentPath',
+    'Window_PreviewKeyDownV021',
+    'PrintOriginalButton_Click'
+)) {
+    if (-not $printingSource.Contains($fragment)) {
+        throw "HSPdf original-PDF print invariant missing: $fragment"
+    }
+}
+if ($printingSource.Contains('PdfPageRenderOptions') -or $printingSource.Contains('PrintDialog')) {
+    throw 'The active v0.2.1 print route must not rasterize the PDF or use the WPF PrintDialog.'
 }
 
 $xaml = Get-Content (Join-Path $sourceRoot 'MainWindow.xaml') -Raw
@@ -63,10 +80,15 @@ foreach ($fragment in @(
     'LeftResizeHandle',
     'RightResizeHandle',
     'FolderPdfListBox',
-    'PrintButton'
+    'PrintButton',
+    'PreviewKeyDown="Window_PreviewKeyDownV021"',
+    'Click="PrintOriginalButton_Click"',
+    'x:Name="PdfCanvas" Margin="16"',
+    'BorderThickness="0,0,1,0"',
+    'BorderThickness="1,0,0,0"'
 )) {
     if (-not $xaml.Contains($fragment)) {
-        throw "HSPdf layout invariant missing: $fragment"
+        throw "HSPdf v0.2.1 layout/route invariant missing: $fragment"
     }
 }
 
