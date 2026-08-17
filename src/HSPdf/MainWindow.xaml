@@ -4,7 +4,7 @@
         Title="HSPdf"
         Width="1120"
         Height="780"
-        MinWidth="720"
+        MinWidth="760"
         MinHeight="520"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource HsBackgroundBrush}"
@@ -13,124 +13,202 @@
         PreviewKeyDown="Window_PreviewKeyDown"
         Loaded="Window_Loaded"
         Closed="Window_Closed"
+        SizeChanged="Window_SizeChanged"
         AllowDrop="True"
         Drop="Window_Drop">
     <Window.Resources>
         <Style x:Key="PdfToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource HsSecondaryButtonStyle}">
-            <Setter Property="Width" Value="54" />
-            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="MinWidth" Value="0" />
             <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="3,0" />
+            <Setter Property="Padding" Value="10,0" />
             <Setter Property="Margin" Value="0,0,0,8" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
         <Style x:Key="PdfToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource HsPrimaryButtonStyle}">
-            <Setter Property="Width" Value="54" />
-            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="MinWidth" Value="0" />
             <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="3,0" />
+            <Setter Property="Padding" Value="10,0" />
             <Setter Property="Margin" Value="0,0,0,10" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style x:Key="FolderPdfListItemStyle" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,4" />
         </Style>
     </Window.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="72" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="30" />
-        </Grid.RowDefinitions>
+    <Grid x:Name="ShellGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="LeftSidebarColumn" Width="190" />
+            <ColumnDefinition Width="5" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="5" />
+            <ColumnDefinition x:Name="RightSidebarColumn" Width="190" />
+        </Grid.ColumnDefinitions>
 
-        <Border Grid.Row="0" Background="{DynamicResource HsHeaderBrush}">
-            <Grid Margin="20,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border Width="36" Height="36" CornerRadius="8"
-                        Background="{DynamicResource HsAccentBrush}"
-                        VerticalAlignment="Center">
-                    <TextBlock Text="HS" Foreground="White" FontWeight="Bold" FontSize="14"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock x:Name="AppNameTextBlock" Foreground="White" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock x:Name="AppDescriptionTextBlock" Foreground="#B9C3D6" FontSize="12" Margin="0,3,0,0" />
-                </StackPanel>
-                <Border Grid.Column="2" Background="{DynamicResource HsHeaderSurfaceBrush}"
-                        CornerRadius="12" Padding="10,5" VerticalAlignment="Center">
-                    <TextBlock x:Name="VersionTextBlock" Foreground="#D9E0EC" FontSize="12" />
-                </Border>
-            </Grid>
-        </Border>
+        <Grid Grid.Column="0" Background="{DynamicResource HsSurfaceBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="72" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="30" />
+            </Grid.RowDefinitions>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="70" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Background="{DynamicResource HsSurfaceBrush}"
-                    BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="0,0,1,0">
-                <StackPanel Margin="8,12,8,8">
-                    <Button Content="Open" Style="{StaticResource PdfToolbarPrimaryButtonStyle}"
-                            ToolTip="PDF öffnen · Ctrl+O" Click="OpenButton_Click" />
-                    <Separator Margin="0,0,0,10" />
-                    <Button x:Name="PreviousButton" Content="Prev" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="Vorherige Seite · Page Up / Links" Click="PreviousButton_Click" />
-                    <Button x:Name="NextButton" Content="Next" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="Nächste Seite · Page Down / Rechts" Click="NextButton_Click" />
-                    <Separator Margin="0,0,0,10" />
-                    <Button x:Name="ZoomInButton" Content="+" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="Vergrößern · +" Click="ZoomInButton_Click" />
-                    <Button x:Name="ZoomOutButton" Content="−" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="Verkleinern · -" Click="ZoomOutButton_Click" />
-                    <Button x:Name="FitHeightButton" Content="Fit H" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="Auf Höhe einpassen · H" Click="FitHeightButton_Click" />
-                    <Button x:Name="FitWidthButton" Content="Fit W" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="Auf Breite einpassen · W" Click="FitWidthButton_Click" />
-                    <Button x:Name="RotateButton" Content="Rot" Style="{StaticResource PdfToolbarButtonStyle}"
-                            ToolTip="90° im Uhrzeigersinn · R" Click="RotateButton_Click" />
-                </StackPanel>
+            <Border Grid.Row="0" Background="{DynamicResource HsHeaderBrush}">
+                <Grid Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="36" Height="36" CornerRadius="8"
+                            Background="{DynamicResource HsAccentBrush}"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="HS" Foreground="White" FontWeight="Bold" FontSize="14"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="AppNameTextBlock" Foreground="White" FontSize="18" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="AppDescriptionTextBlock" Foreground="#B9C3D6" FontSize="11" Margin="0,3,0,0"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <ScrollViewer x:Name="PdfScrollViewer" Grid.Column="1"
-                          Background="#E5E8ED"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalContentAlignment="Stretch"
-                          VerticalContentAlignment="Stretch"
-                          PreviewMouseWheel="PdfScrollViewer_PreviewMouseWheel"
-                          SizeChanged="PdfScrollViewer_SizeChanged">
-                <Grid x:Name="PdfCanvas" Margin="24" MinWidth="200" MinHeight="200">
-                    <StackPanel x:Name="EmptyStatePanel" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="PDF öffnen" FontSize="20" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource HsPrimaryTextBrush}" HorizontalAlignment="Center" />
-                        <TextBlock Text="Ctrl+O oder PDF hier hineinziehen"
-                                   Style="{StaticResource HsSecondaryTextStyle}" Margin="0,6,0,0" HorizontalAlignment="Center" />
+            <Border Grid.Row="1" BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="0,0,1,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="12">
+                        <Button Content="Öffnen" Style="{StaticResource PdfToolbarPrimaryButtonStyle}"
+                                ToolTip="PDF öffnen · Ctrl+O" Click="OpenButton_Click" />
+                        <Separator Margin="0,0,0,10" />
+                        <Button x:Name="PreviousButton" Content="← Seite" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Vorherige Seite · Page Up / Links" Click="PreviousButton_Click" />
+                        <Button x:Name="NextButton" Content="Seite →" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Nächste Seite · Page Down / Rechts" Click="NextButton_Click" />
+                        <Separator Margin="0,0,0,10" />
+                        <Button x:Name="ZoomInButton" Content="Zoom +" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Vergrößern · +" Click="ZoomInButton_Click" />
+                        <Button x:Name="ZoomOutButton" Content="Zoom −" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Verkleinern · -" Click="ZoomOutButton_Click" />
+                        <Button x:Name="FitHeightButton" Content="Fit Höhe" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Auf Höhe einpassen · H" Click="FitHeightButton_Click" />
+                        <Button x:Name="FitWidthButton" Content="Fit Breite" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Auf Breite einpassen · W" Click="FitWidthButton_Click" />
+                        <Button x:Name="RotateButton" Content="Drehen" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="90° im Uhrzeigersinn · R" Click="RotateButton_Click" />
+                        <Separator Margin="0,0,0,10" />
+                        <Button x:Name="PrintButton" Content="Drucken" Style="{StaticResource PdfToolbarButtonStyle}"
+                                ToolTip="Windows-Druckdialog · Ctrl+P" Click="PrintButton_Click" />
                     </StackPanel>
-                    <Border x:Name="PageBorder" Visibility="Collapsed"
-                            Background="White" BorderBrush="#C9CED8" BorderThickness="1"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Image x:Name="PdfImage" Stretch="None" SnapsToDevicePixels="True" UseLayoutRounding="True" />
-                    </Border>
-                </Grid>
-            </ScrollViewer>
+                </ScrollViewer>
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource HsSurfaceBrush}"
+                    BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="0,1,1,0">
+                <TextBlock x:Name="StatusTextBlock" Text="Bereit · PDF öffnen" FontSize="12"
+                           Margin="10,0" Foreground="{DynamicResource HsSecondaryTextBrush}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </Border>
         </Grid>
 
-        <Border Grid.Row="2" Background="{DynamicResource HsSurfaceBrush}"
-                BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="0,1,0,0">
-            <Grid Margin="16,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="StatusTextBlock" Text="Bereit · PDF öffnen" FontSize="12"
-                           Foreground="{DynamicResource HsSecondaryTextBrush}" VerticalAlignment="Center" />
-                <TextBlock x:Name="ContextTextBlock" Grid.Column="1" Text="Kein Dokument" FontSize="12"
-                           Foreground="{DynamicResource HsMutedTextBrush}" VerticalAlignment="Center" />
+        <Border x:Name="LeftResizeHandle" Grid.Column="1"
+                Background="{DynamicResource HsBorderBrush}" Cursor="SizeWE"
+                MouseLeftButtonDown="SidebarResizeHandle_MouseLeftButtonDown"
+                MouseMove="SidebarResizeHandle_MouseMove"
+                MouseLeftButtonUp="SidebarResizeHandle_MouseLeftButtonUp"
+                ToolTip="Seitenleistenbreite ändern" />
+
+        <ScrollViewer x:Name="PdfScrollViewer" Grid.Column="2"
+                      Background="#E5E8ED"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch"
+                      PreviewMouseWheel="PdfScrollViewer_PreviewMouseWheel"
+                      SizeChanged="PdfScrollViewer_SizeChanged">
+            <Grid x:Name="PdfCanvas" Margin="18" MinWidth="200" MinHeight="200">
+                <StackPanel x:Name="EmptyStatePanel" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="PDF öffnen" FontSize="20" FontWeight="SemiBold"
+                               Foreground="{DynamicResource HsPrimaryTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Ctrl+O oder PDF hier hineinziehen"
+                               Style="{StaticResource HsSecondaryTextStyle}" Margin="0,6,0,0" HorizontalAlignment="Center" />
+                </StackPanel>
+                <Border x:Name="PageBorder" Visibility="Collapsed"
+                        Background="White" BorderBrush="#C9CED8" BorderThickness="1"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image x:Name="PdfImage" Stretch="None" SnapsToDevicePixels="True" UseLayoutRounding="True" />
+                </Border>
             </Grid>
-        </Border>
+        </ScrollViewer>
+
+        <Border x:Name="RightResizeHandle" Grid.Column="3"
+                Background="{DynamicResource HsBorderBrush}" Cursor="SizeWE"
+                MouseLeftButtonDown="SidebarResizeHandle_MouseLeftButtonDown"
+                MouseMove="SidebarResizeHandle_MouseMove"
+                MouseLeftButtonUp="SidebarResizeHandle_MouseLeftButtonUp"
+                ToolTip="Seitenleistenbreite ändern" />
+
+        <Grid Grid.Column="4" Background="{DynamicResource HsSurfaceBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="72" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="30" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="{DynamicResource HsHeaderBrush}">
+                <Grid Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="PDFs" Foreground="White" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock x:Name="FolderHeaderTextBlock" Text="Kein Ordner" Foreground="#B9C3D6" FontSize="11"
+                                   Margin="0,3,8,0" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Background="{DynamicResource HsHeaderSurfaceBrush}"
+                            CornerRadius="12" Padding="8,5" VerticalAlignment="Center">
+                        <TextBlock x:Name="VersionTextBlock" Foreground="#D9E0EC" FontSize="11" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="1,0,0,0">
+                <Grid Margin="10">
+                    <TextBlock x:Name="FolderEmptyTextBlock" Text="Keine weiteren PDFs im Ordner"
+                               Style="{StaticResource HsSecondaryTextStyle}"
+                               TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextAlignment="Center" />
+                    <ListBox x:Name="FolderPdfListBox"
+                             Visibility="Collapsed"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ItemContainerStyle="{StaticResource FolderPdfListItemStyle}"
+                             SelectionChanged="FolderPdfListBox_SelectionChanged"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="8,7" Background="Transparent">
+                                    <TextBlock Text="{Binding Name}" ToolTip="{Binding Path}"
+                                               Foreground="{DynamicResource HsPrimaryTextBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource HsSurfaceBrush}"
+                    BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="1,1,0,0">
+                <TextBlock x:Name="ContextTextBlock" Text="Kein Dokument" FontSize="12"
+                           Margin="10,0" Foreground="{DynamicResource HsMutedTextBrush}"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"
+                           TextTrimming="CharacterEllipsis" />
+            </Border>
+        </Grid>
     </Grid>
 </Window>

@@ -15,9 +15,9 @@ if ($project -notmatch '<TargetFrameworkVersion>v4\.7\.2</TargetFrameworkVersion
 if ($project -match '<PackageReference') {
     throw 'HSPdf must not contain NuGet PackageReference dependencies.'
 }
-foreach ($requiredReference in @('System.Runtime.WindowsRuntime', 'WindowsWinMdPath', '<Reference Include="Windows"')) {
+foreach ($requiredReference in @('System.Runtime.WindowsRuntime', 'WindowsWinMdPath', '<Reference Include="Windows"', '<Reference Include="ReachFramework"')) {
     if (-not $project.Contains($requiredReference)) {
-        throw "HSPdf project is missing required Windows PDF build reference '$requiredReference'."
+        throw "HSPdf project is missing required reader/print build reference '$requiredReference'."
     }
 }
 
@@ -40,9 +40,33 @@ foreach ($required in @('Themes\Colors.xaml', 'Themes\Controls.xaml', 'MainWindo
 }
 
 $readerSource = Get-Content (Join-Path $sourceRoot 'MainWindow.xaml.cs') -Raw
-foreach ($fragment in @('Windows.Data.Pdf', 'FileAccess.Read', 'PdfPageRenderOptions', 'MaximumZoom = 4.0')) {
+foreach ($fragment in @(
+    'Windows.Data.Pdf',
+    'FileAccess.Read',
+    'PdfPageRenderOptions',
+    'MaximumZoom = 4.0',
+    'Directory.EnumerateFiles',
+    'SearchOption.TopDirectoryOnly',
+    'PrintDialog',
+    'PdfPrintPaginator',
+    '_viewMode == ViewMode.FitHeight'
+)) {
     if (-not $readerSource.Contains($fragment)) {
         throw "HSPdf reader invariant missing: $fragment"
+    }
+}
+
+$xaml = Get-Content (Join-Path $sourceRoot 'MainWindow.xaml') -Raw
+foreach ($fragment in @(
+    'LeftSidebarColumn',
+    'RightSidebarColumn',
+    'LeftResizeHandle',
+    'RightResizeHandle',
+    'FolderPdfListBox',
+    'PrintButton'
+)) {
+    if (-not $xaml.Contains($fragment)) {
+        throw "HSPdf layout invariant missing: $fragment"
     }
 }
 

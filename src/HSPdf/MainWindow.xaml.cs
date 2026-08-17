@@ -7,6 +7,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -25,11 +27,112 @@ namespace HSPdf
             Manual
         }
 
+        private sealed class FolderPdfItem
+        {
+            public FolderPdfItem(string path)
+            {
+                Path = path;
+                Name = System.IO.Path.GetFileName(path);
+            }
+
+            public string Name { get; private set; }
+            public string Path { get; private set; }
+        }
+
+        private sealed class PdfPrintPaginator : DocumentPaginator
+        {
+            private const double PrintMargin = 24.0;
+            private const double PrintRenderScale = 2.0;
+            private const double MaxPrintRenderPixels = 16000000.0;
+
+            private readonly PdfDocument _document;
+            private Size _pageSize;
+
+            public PdfPrintPaginator(PdfDocument document, Size pageSize)
+            {
+                _document = document;
+                _pageSize = pageSize;
+            }
+
+            public override bool IsPageCountValid
+            {
+                get { return true; }
+            }
+
+            public override int PageCount
+            {
+                get { return checked((int)_document.PageCount); }
+            }
+
+            public override Size PageSize
+            {
+                get { return _pageSize; }
+                set { _pageSize = value; }
+            }
+
+            public override IDocumentPaginatorSource Source
+            {
+                get { return null; }
+            }
+
+            public override DocumentPage GetPage(int pageNumber)
+            {
+                if (pageNumber < 0 || pageNumber >= PageCount)
+                {
+                    return DocumentPage.Missing;
+                }
+
+                using (PdfPage page = _document.GetPage((uint)pageNumber))
+                {
+                    double availableWidth = Math.Max(1.0, PageSize.Width - (PrintMargin * 2.0));
+                    double availableHeight = Math.Max(1.0, PageSize.Height - (PrintMargin * 2.0));
+                    double pageWidth = Math.Max(1.0, page.Size.Width);
+                    double pageHeight = Math.Max(1.0, page.Size.Height);
+                    double scale = Math.Min(availableWidth / pageWidth, availableHeight / pageHeight);
+                    double drawWidth = pageWidth * scale;
+                    double drawHeight = pageHeight * scale;
+
+                    double renderWidth = drawWidth * PrintRenderScale;
+                    double renderHeight = drawHeight * PrintRenderScale;
+                    double pixels = renderWidth * renderHeight;
+                    if (pixels > MaxPrintRenderPixels)
+                    {
+                        double correction = Math.Sqrt(MaxPrintRenderPixels / pixels);
+                        renderWidth *= correction;
+                        renderHeight *= correction;
+                    }
+
+                    BitmapSource bitmap = RenderPageBitmapAsync(
+                        page,
+                        (uint)Math.Max(1.0, Math.Round(renderWidth)),
+                        (uint)Math.Max(1.0, Math.Round(renderHeight))).GetAwaiter().GetResult();
+
+                    double x = (PageSize.Width - drawWidth) / 2.0;
+                    double y = (PageSize.Height - drawHeight) / 2.0;
+                    var visual = new DrawingVisual();
+                    using (DrawingContext drawing = visual.RenderOpen())
+                    {
+                        drawing.DrawRectangle(Brushes.White, null, new Rect(new Point(0, 0), PageSize));
+                        drawing.DrawImage(bitmap, new Rect(x, y, drawWidth, drawHeight));
+                    }
+
+                    return new DocumentPage(
+                        visual,
+                        PageSize,
+                        new Rect(new Point(0, 0), PageSize),
+                        new Rect(x, y, drawWidth, drawHeight));
+                }
+            }
+        }
+
         private const double MinimumManualZoom = 0.10;
         private const double MaximumZoom = 4.0;
         private const double ZoomStep = 1.15;
         private const double MaxRenderPixels = 16000000.0;
         private const int MaxCachedPages = 3;
+        private const double MinimumSidebarWidth = 120.0;
+        private const double MaximumSidebarWidth = 360.0;
+        private const double MinimumViewerWidth = 320.0;
 
         private readonly SemaphoreSlim _renderGate = new SemaphoreSlim(1, 1);
         private readonly DispatcherTimer _resizeTimer;
@@ -46,6 +149,8 @@ namespace HSPdf
         private double _effectiveZoom = 1.0;
         private int _rotationDegrees;
         private int _renderRequest;
+        private bool _isResizingSidebar;
+        private bool _resizeFromLeft;
 
         public MainWindow()
         {
@@ -57,6 +162,7 @@ namespace HSPdf
             _resizeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
             _resizeTimer.Tick += ResizeTimer_Tick;
             UpdateUiState();
+            RefreshFolderPdfList();
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -75,6 +181,19 @@ namespace HSPdf
             Interlocked.Increment(ref _renderRequest);
             DisposeDocument();
             _renderGate.Dispose();
+        }
+
+        private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (LeftSidebarColumn == null || ShellGrid == null || ShellGrid.ActualWidth <= 0)
+            {
+                return;
+            }
+
+            double currentWidth = LeftSidebarColumn.ActualWidth > 0
+                ? LeftSidebarColumn.ActualWidth
+                : LeftSidebarColumn.Width.Value;
+            SetSidebarWidth(currentWidth);
         }
 
         private async void Window_Drop(object sender, DragEventArgs e)
@@ -142,6 +261,7 @@ namespace HSPdf
                 ClearCache();
                 EmptyStatePanel.Visibility = Visibility.Collapsed;
                 PageBorder.Visibility = Visibility.Visible;
+                RefreshFolderPdfList();
                 UpdateUiState();
                 await RenderCurrentPageAsync();
             }
@@ -208,7 +328,7 @@ namespace HSPdf
                     string cacheKey = string.Format("{0}:{1}x{2}", _pageIndex, width, height);
                     if (!_renderCache.TryGetValue(cacheKey, out bitmap))
                     {
-                        bitmap = await RenderPageAsync(page, width, height);
+                        bitmap = await RenderPageBitmapAsync(page, width, height);
                         AddToCache(cacheKey, bitmap);
                     }
                 }
@@ -238,7 +358,7 @@ namespace HSPdf
             }
         }
 
-        private async Task<BitmapSource> RenderPageAsync(PdfPage page, uint width, uint height)
+        private static async Task<BitmapSource> RenderPageBitmapAsync(PdfPage page, uint width, uint height)
         {
             using (var output = new InMemoryRandomAccessStream())
             {
@@ -249,7 +369,7 @@ namespace HSPdf
                     IsIgnoringHighContrast = true
                 };
 
-                await page.RenderToStreamAsync(output, options).AsTask();
+                await page.RenderToStreamAsync(output, options).AsTask().ConfigureAwait(false);
                 output.Seek(0);
                 using (Stream stream = output.AsStreamForRead())
                 {
@@ -274,8 +394,8 @@ namespace HSPdf
 
             double viewportWidth = PdfScrollViewer.ViewportWidth > 0 ? PdfScrollViewer.ViewportWidth : PdfScrollViewer.ActualWidth;
             double viewportHeight = PdfScrollViewer.ViewportHeight > 0 ? PdfScrollViewer.ViewportHeight : PdfScrollViewer.ActualHeight;
-            double availableWidth = Math.Max(120.0, viewportWidth - 48.0);
-            double availableHeight = Math.Max(120.0, viewportHeight - 48.0);
+            double availableWidth = Math.Max(120.0, viewportWidth - 36.0);
+            double availableHeight = Math.Max(120.0, viewportHeight - 36.0);
 
             if (_viewMode == ViewMode.FitHeight)
             {
@@ -368,6 +488,7 @@ namespace HSPdf
             }
 
             _viewMode = mode;
+            PdfScrollViewer.ScrollToHome();
             await RenderCurrentPageAsync();
         }
 
@@ -379,7 +500,124 @@ namespace HSPdf
             }
 
             _rotationDegrees = (_rotationDegrees + 90) % 360;
+            PdfScrollViewer.ScrollToHome();
             await RenderCurrentPageAsync();
+        }
+
+        private void RefreshFolderPdfList()
+        {
+            if (string.IsNullOrWhiteSpace(_documentPath))
+            {
+                FolderHeaderTextBlock.Text = "Kein Ordner";
+                FolderPdfListBox.ItemsSource = null;
+                FolderPdfListBox.Visibility = Visibility.Collapsed;
+                FolderEmptyTextBlock.Text = "Keine weiteren PDFs im Ordner";
+                FolderEmptyTextBlock.Visibility = Visibility.Visible;
+                return;
+            }
+
+            string directory = Path.GetDirectoryName(_documentPath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                return;
+            }
+
+            FolderHeaderTextBlock.Text = GetFolderDisplayName(directory);
+
+            try
+            {
+                List<FolderPdfItem> items = Directory.EnumerateFiles(directory, "*.pdf", SearchOption.TopDirectoryOnly)
+                    .Where(path => !string.Equals(path, _documentPath, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(path => Path.GetFileName(path), StringComparer.CurrentCultureIgnoreCase)
+                    .Select(path => new FolderPdfItem(path))
+                    .ToList();
+
+                FolderPdfListBox.ItemsSource = items;
+                FolderPdfListBox.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                FolderEmptyTextBlock.Text = items.Count > 0 ? string.Empty : "Keine weiteren PDFs im Ordner";
+                FolderEmptyTextBlock.Visibility = items.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+            }
+            catch (Exception)
+            {
+                FolderPdfListBox.ItemsSource = null;
+                FolderPdfListBox.Visibility = Visibility.Collapsed;
+                FolderEmptyTextBlock.Text = "Ordner konnte nicht gelesen werden";
+                FolderEmptyTextBlock.Visibility = Visibility.Visible;
+            }
+        }
+
+        private static string GetFolderDisplayName(string directory)
+        {
+            string trimmed = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string name = Path.GetFileName(trimmed);
+            return string.IsNullOrWhiteSpace(name) ? directory : name;
+        }
+
+        private async void FolderPdfListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            FolderPdfItem item = FolderPdfListBox.SelectedItem as FolderPdfItem;
+            if (item == null)
+            {
+                return;
+            }
+
+            FolderPdfListBox.SelectedItem = null;
+            await OpenPdfAsync(item.Path);
+        }
+
+        private void SetSidebarWidth(double requestedWidth)
+        {
+            if (ShellGrid == null || LeftSidebarColumn == null || RightSidebarColumn == null)
+            {
+                return;
+            }
+
+            double handles = 10.0;
+            double widthLimit = (ShellGrid.ActualWidth - MinimumViewerWidth - handles) / 2.0;
+            double maximum = Math.Max(MinimumSidebarWidth, Math.Min(MaximumSidebarWidth, widthLimit));
+            double width = Math.Max(MinimumSidebarWidth, Math.Min(maximum, requestedWidth));
+
+            LeftSidebarColumn.Width = new GridLength(width);
+            RightSidebarColumn.Width = new GridLength(width);
+        }
+
+        private void SidebarResizeHandle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var handle = sender as UIElement;
+            if (handle == null)
+            {
+                return;
+            }
+
+            _isResizingSidebar = true;
+            _resizeFromLeft = ReferenceEquals(sender, LeftResizeHandle);
+            handle.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void SidebarResizeHandle_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isResizingSidebar || e.LeftButton != MouseButtonState.Pressed)
+            {
+                return;
+            }
+
+            Point point = e.GetPosition(ShellGrid);
+            double requestedWidth = _resizeFromLeft ? point.X : ShellGrid.ActualWidth - point.X;
+            SetSidebarWidth(requestedWidth);
+            e.Handled = true;
+        }
+
+        private void SidebarResizeHandle_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var handle = sender as UIElement;
+            if (handle != null)
+            {
+                handle.ReleaseMouseCapture();
+            }
+
+            _isResizingSidebar = false;
+            e.Handled = true;
         }
 
         private void UpdateUiState()
@@ -392,6 +630,7 @@ namespace HSPdf
             FitHeightButton.IsEnabled = hasDocument;
             FitWidthButton.IsEnabled = hasDocument;
             RotateButton.IsEnabled = hasDocument;
+            PrintButton.IsEnabled = hasDocument;
 
             if (!hasDocument)
             {
@@ -441,6 +680,46 @@ namespace HSPdf
             await RotateAsync();
         }
 
+        private void PrintButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_document == null)
+            {
+                return;
+            }
+
+            var dialog = new PrintDialog();
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            double pageWidth = dialog.PrintableAreaWidth;
+            double pageHeight = dialog.PrintableAreaHeight;
+            if (double.IsNaN(pageWidth) || double.IsInfinity(pageWidth) || pageWidth <= 0)
+            {
+                pageWidth = 816.0;
+            }
+            if (double.IsNaN(pageHeight) || double.IsInfinity(pageHeight) || pageHeight <= 0)
+            {
+                pageHeight = 1056.0;
+            }
+
+            try
+            {
+                StatusTextBlock.Text = "Druck wird vorbereitet…";
+                var paginator = new PdfPrintPaginator(_document, new Size(pageWidth, pageHeight));
+                dialog.PrintDocument(paginator, Path.GetFileName(_documentPath));
+                StatusTextBlock.Text = "Druckauftrag gesendet";
+            }
+            catch (Exception)
+            {
+                StatusTextBlock.Text = "Drucken fehlgeschlagen";
+                MessageBox.Show(this,
+                    "Das Dokument konnte nicht gedruckt werden.",
+                    "HSPdf", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         private void PdfScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (_document == null || _viewMode == ViewMode.Manual)
@@ -472,13 +751,24 @@ namespace HSPdf
                 return;
             }
 
-            const double edgeTolerance = 1.0;
-            if (e.Delta < 0 && (PdfScrollViewer.ScrollableHeight <= edgeTolerance || PdfScrollViewer.VerticalOffset >= PdfScrollViewer.ScrollableHeight - edgeTolerance))
+            if (_viewMode == ViewMode.FitHeight)
+            {
+                e.Handled = true;
+                await NavigateAsync(e.Delta < 0 ? 1 : -1);
+                return;
+            }
+
+            const double edgeTolerance = 2.0;
+            bool noVerticalScroll = PdfScrollViewer.ScrollableHeight <= edgeTolerance;
+            bool atTop = PdfScrollViewer.VerticalOffset <= edgeTolerance;
+            bool atBottom = PdfScrollViewer.VerticalOffset >= PdfScrollViewer.ScrollableHeight - edgeTolerance;
+
+            if (e.Delta < 0 && (noVerticalScroll || atBottom))
             {
                 e.Handled = true;
                 await NavigateAsync(1);
             }
-            else if (e.Delta > 0 && (PdfScrollViewer.ScrollableHeight <= edgeTolerance || PdfScrollViewer.VerticalOffset <= edgeTolerance))
+            else if (e.Delta > 0 && (noVerticalScroll || atTop))
             {
                 e.Handled = true;
                 await NavigateAsync(-1);
@@ -492,6 +782,12 @@ namespace HSPdf
             {
                 e.Handled = true;
                 OpenButton_Click(sender, new RoutedEventArgs());
+                return;
+            }
+            if (control && e.Key == Key.P)
+            {
+                e.Handled = true;
+                PrintButton_Click(sender, new RoutedEventArgs());
                 return;
             }
 
@@ -540,6 +836,7 @@ namespace HSPdf
                     {
                         e.Handled = true;
                         _pageIndex = 0;
+                        PdfScrollViewer.ScrollToHome();
                         await RenderCurrentPageAsync();
                     }
                     break;
@@ -548,6 +845,7 @@ namespace HSPdf
                     {
                         e.Handled = true;
                         _pageIndex = _document.PageCount - 1;
+                        PdfScrollViewer.ScrollToHome();
                         await RenderCurrentPageAsync();
                     }
                     break;
