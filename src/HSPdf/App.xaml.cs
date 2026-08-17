@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace HSTemplate
+namespace HSPdf
 {
     public partial class App : Application
     {

@@ -8,15 +8,15 @@ permissions:
   contents: read
 
 jobs:
-  template-invariants:
-    name: Template invariants
+  product-invariants:
+    name: Product invariants
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate HSSuite baseline
+      - name: Validate HSPdf invariants
         shell: pwsh
-        run: ./tests/TemplateChecks.ps1
+        run: ./tests/ProductChecks.ps1
 
   build:
     name: Build .NET Framework 4.7.2
@@ -28,11 +28,11 @@ jobs:
         uses: microsoft/setup-msbuild@v2
       - name: Build Release
         shell: pwsh
-        run: msbuild HSTemplate.sln /m /t:Rebuild /p:Configuration=Release /p:Platform="Any CPU"
+        run: ./scripts/Build.ps1 -Configuration Release -Platform 'Any CPU'
       - name: Verify executable
         shell: pwsh
         run: |
-          if (-not (Test-Path 'src/HSTemplate/bin/Release/HSTemplate.exe')) { throw 'Release EXE missing.' }
+          if (-not (Test-Path 'src/HSPdf/bin/Release/HSPdf.exe')) { throw 'Release EXE missing.' }
       - name: Smoke-test release asset resolution
         shell: pwsh
         run: |
@@ -46,6 +46,6 @@ jobs:
       - name: Upload CI build
         uses: actions/upload-artifact@v4
         with:
-          name: HSTemplate-pr-build
-          path: src/HSTemplate/bin/Release/HSTemplate.exe
+          name: HSPdf-pr-build
+          path: src/HSPdf/bin/Release/HSPdf.exe
           if-no-files-found: error

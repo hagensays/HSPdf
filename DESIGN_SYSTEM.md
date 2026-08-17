@@ -37,7 +37,7 @@ Use an 8 px base rhythm.
 
 ## Canonical palette
 
-Defined as actual brushes in `src/HSTemplate/Themes/Colors.xaml`.
+Defined as actual brushes in `src/HSPdf/Themes/Colors.xaml`.
 
 - App background: `#F4F6F8`
 - Surface/card: `#FFFFFF`

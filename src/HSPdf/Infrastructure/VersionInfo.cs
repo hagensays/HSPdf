@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace HSTemplate.Infrastructure
+namespace HSPdf.Infrastructure
 {
     internal static class VersionInfo
     {
