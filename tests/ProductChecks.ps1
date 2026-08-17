@@ -75,7 +75,7 @@ $pin = (Get-Content (Join-Path $root 'vendor\pdfium\PDFIUM_COMMIT.txt') -Raw).Tr
 if ($pin -notmatch '^[0-9a-f]{40}$') { throw 'PDFium must be pinned to an exact 40-character commit.' }
 
 $pdfiumBuild = Get-Content (Join-Path $root 'scripts\BuildPdfium.ps1') -Raw
-foreach ($fragment in @('https://pdfium.googlesource.com/pdfium.git', 'checkout_configuration', 'minimal', 'target_cpu = "x64"', 'pdf_is_complete_lib = true', 'pdf_enable_v8 = false', 'pdf_enable_xfa = false', 'pdf_use_skia = false', 'hspdf_bridge:hspdf_pdfium', 'CollectPdfiumLicenses.ps1', 'VCRUNTIME|MSVCP')) {
+foreach ($fragment in @('https://pdfium.googlesource.com/pdfium.git', 'checkout_configuration', 'minimal', 'target_cpu = "x64"', 'pdf_is_complete_lib = true', 'pdf_enable_v8 = false', 'pdf_enable_xfa = false', 'pdf_use_skia = false', 'autoninja -C out/HSPdf hspdf_pdfium', 'CollectPdfiumLicenses.ps1', 'VCRUNTIME|MSVCP')) {
     if (-not $pdfiumBuild.Contains($fragment)) { throw "PDFium build invariant missing: $fragment" }
 }
 
