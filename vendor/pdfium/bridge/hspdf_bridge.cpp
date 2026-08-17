@@ -5,7 +5,6 @@
 #include <cstring>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <new>
 
 #include "public/fpdf_attachment.h"
@@ -13,8 +12,17 @@
 
 namespace {
 
-std::recursive_mutex g_pdfium_mutex;
+SRWLOCK g_pdfium_lock = SRWLOCK_INIT;
 bool g_initialized = false;
+
+class ScopedPdfiumLock {
+ public:
+  ScopedPdfiumLock() { AcquireSRWLockExclusive(&g_pdfium_lock); }
+  ~ScopedPdfiumLock() { ReleaseSRWLockExclusive(&g_pdfium_lock); }
+
+  ScopedPdfiumLock(const ScopedPdfiumLock&) = delete;
+  ScopedPdfiumLock& operator=(const ScopedPdfiumLock&) = delete;
+};
 
 struct DocumentHolder {
   FPDF_DOCUMENT document = nullptr;
@@ -83,7 +91,7 @@ FPDF_ATTACHMENT GetAttachment(DocumentHolder* holder, int index) {
 extern "C" {
 
 __declspec(dllexport) int HSPDF_Initialize() {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   if (!g_initialized) {
     FPDF_InitLibrary();
     g_initialized = true;
@@ -92,7 +100,7 @@ __declspec(dllexport) int HSPDF_Initialize() {
 }
 
 __declspec(dllexport) void HSPDF_Shutdown() {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   if (g_initialized) {
     FPDF_DestroyLibrary();
     g_initialized = false;
@@ -100,7 +108,7 @@ __declspec(dllexport) void HSPDF_Shutdown() {
 }
 
 __declspec(dllexport) void* HSPDF_OpenDocument(const wchar_t* path) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   if (!g_initialized || !path || !*path) {
     return nullptr;
   }
@@ -139,7 +147,7 @@ __declspec(dllexport) void* HSPDF_OpenDocument(const wchar_t* path) {
 __declspec(dllexport) void* HSPDF_OpenDocumentMemory(
     const unsigned char* data,
     unsigned long long length) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   if (!g_initialized || !data || length == 0 ||
       length > static_cast<unsigned long long>(std::numeric_limits<size_t>::max())) {
     return nullptr;
@@ -166,17 +174,17 @@ __declspec(dllexport) void* HSPDF_OpenDocumentMemory(
 }
 
 __declspec(dllexport) void HSPDF_CloseDocument(void* handle) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   delete AsHolder(handle);
 }
 
 __declspec(dllexport) unsigned long HSPDF_GetLastError() {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   return FPDF_GetLastError();
 }
 
 __declspec(dllexport) int HSPDF_GetPageCount(void* handle) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   return holder && holder->document ? FPDF_GetPageCount(holder->document) : 0;
 }
@@ -185,7 +193,7 @@ __declspec(dllexport) int HSPDF_GetPageSize(void* handle,
                                             int page_index,
                                             double* width_points,
                                             double* height_points) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   if (!holder || !holder->document || !width_points || !height_points ||
       page_index < 0) {
@@ -209,7 +217,7 @@ __declspec(dllexport) int HSPDF_RenderPage(void* handle,
                                            int printing,
                                            void* bgra_buffer,
                                            int stride) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   if (!holder || !holder->document || page_index < 0 || width_pixels <= 0 ||
       height_pixels <= 0 || !bgra_buffer || stride < width_pixels * 4) {
@@ -249,7 +257,7 @@ __declspec(dllexport) int HSPDF_RenderPage(void* handle,
 }
 
 __declspec(dllexport) int HSPDF_GetAttachmentCount(void* handle) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   if (!holder || !holder->document) {
     return 0;
@@ -262,7 +270,7 @@ __declspec(dllexport) int HSPDF_GetAttachmentName(void* handle,
                                                   int index,
                                                   void* utf16_buffer,
                                                   int capacity_chars) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   FPDF_ATTACHMENT attachment = GetAttachment(holder, index);
   if (!attachment) {
@@ -296,7 +304,7 @@ __declspec(dllexport) int HSPDF_GetAttachmentName(void* handle,
 
 __declspec(dllexport) unsigned long long HSPDF_GetAttachmentSize(void* handle,
                                                                  int index) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   FPDF_ATTACHMENT attachment = GetAttachment(holder, index);
   if (!attachment) {
@@ -314,7 +322,7 @@ __declspec(dllexport) int HSPDF_CopyAttachmentData(void* handle,
                                                    int index,
                                                    void* buffer,
                                                    unsigned long long capacity) {
-  std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
+  ScopedPdfiumLock lock;
   auto* holder = AsHolder(handle);
   FPDF_ATTACHMENT attachment = GetAttachment(holder, index);
   if (!attachment || !buffer || capacity == 0 ||
