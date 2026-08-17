@@ -11,6 +11,11 @@ if (-not (Test-Path $pinPath)) { throw 'PDFium pin file is missing.' }
 $commit = (Get-Content $pinPath -Raw).Trim()
 if ($commit -notmatch '^[0-9a-f]{40}$') { throw "Invalid PDFium commit pin: $commit" }
 
+$artifactRoot = Join-Path $repoRoot 'artifacts'
+New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+$buildLog = Join-Path $artifactRoot 'pdfium-build.log'
+if (Test-Path $buildLog) { Remove-Item -Force $buildLog }
+
 $baseTemp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } elseif ($env:TEMP) { $env:TEMP } else { $repoRoot }
 $workRoot = Join-Path $baseTemp ("hspdf-pdfium-" + $commit.Substring(0, 12))
 $depotTools = Join-Path $workRoot 'depot_tools'
@@ -106,8 +111,23 @@ Push-Location $pdfiumRoot
 try {
     gn gen out/HSPdf
     if ($LASTEXITCODE -ne 0) { throw 'PDFium GN generation failed.' }
-    autoninja -C out/HSPdf hspdf_pdfium
-    if ($LASTEXITCODE -ne 0) { throw 'PDFium native build failed.' }
+
+    & autoninja -C out/HSPdf hspdf_pdfium 2>&1 | Tee-Object -FilePath $buildLog
+    $nativeExitCode = $LASTEXITCODE
+    if ($nativeExitCode -ne 0) {
+        $tail = @(Get-Content -Path $buildLog -Tail 80)
+        Write-Host ''
+        Write-Host '========== PDFium native build failure tail =========='
+        $tail | ForEach-Object { Write-Host $_ }
+        Write-Host '======================================================='
+
+        if ($env:GITHUB_ACTIONS -eq 'true') {
+            $annotation = ($tail -join "`n")
+            $annotation = $annotation.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=PDFium native build failed::$annotation"
+        }
+        throw "PDFium native build failed with exit code $nativeExitCode. Full log: $buildLog"
+    }
 } finally {
     Pop-Location
 }
