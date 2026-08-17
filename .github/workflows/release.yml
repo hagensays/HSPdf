@@ -1,0 +1,147 @@
+name: Release after merge
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: read
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: windows-latest
+    steps:
+      - name: Validate semantic version branch
+        id: version
+        shell: pwsh
+        run: |
+          $branch = '${{ github.event.pull_request.head.ref }}'
+          if ($branch -notmatch '^v(\d+)\.(\d+)\.(\d+)$') { throw "Merged branch '$branch' is not vMAJOR.MINOR.PATCH." }
+          "tag=$branch" >> $env:GITHUB_OUTPUT
+          "numeric=$($branch.Substring(1))" >> $env:GITHUB_OUTPUT
+
+      - name: Verify required PR CI succeeded
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $sha = '${{ github.event.pull_request.head.sha }}'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $url = "https://api.github.com/repos/${{ github.repository }}/commits/$sha/check-runs"
+          $result = Invoke-RestMethod -Headers $headers -Uri $url
+          $required = @('Template invariants', 'Build .NET Framework 4.7.2')
+          foreach ($name in $required) {
+            $check = $result.check_runs | Where-Object { $_.name -eq $name } | Select-Object -First 1
+            if (-not $check -or $check.conclusion -ne 'success') { throw "Required check '$name' is not successful." }
+          }
+
+      - name: Checkout merged main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Resolve application identity
+        id: app
+        shell: pwsh
+        run: |
+          $project = Get-ChildItem -Path src -Filter *.csproj -Recurse | Select-Object -First 1
+          if (-not $project) { throw 'No application project found.' }
+          $xml = [xml](Get-Content $project.FullName -Raw)
+          $node = $xml.SelectSingleNode("//*[local-name()='AssemblyName']")
+          $assemblyName = if ($node) { $node.InnerText.Trim() } else { $project.BaseName }
+          if ([string]::IsNullOrWhiteSpace($assemblyName)) { throw 'Application name resolved to an empty value.' }
+          "name=$assemblyName" >> $env:GITHUB_OUTPUT
+          "project=$($project.FullName)" >> $env:GITHUB_OUTPUT
+          "projectDir=$($project.DirectoryName)" >> $env:GITHUB_OUTPUT
+
+      - name: Stamp executable version
+        shell: pwsh
+        run: |
+          $numeric = '${{ steps.version.outputs.numeric }}'
+          $assemblyInfo = Get-ChildItem -Path src -Filter AssemblyInfo.cs -Recurse | Select-Object -First 1
+          if (-not $assemblyInfo) { throw 'AssemblyInfo.cs missing.' }
+          $content = Get-Content $assemblyInfo.FullName -Raw
+          $content = [regex]::Replace($content, 'AssemblyVersion\("[^"]+"\)', "AssemblyVersion(`"$numeric.0`")")
+          $content = [regex]::Replace($content, 'AssemblyFileVersion\("[^"]+"\)', "AssemblyFileVersion(`"$numeric.0`")")
+          [System.IO.File]::WriteAllText($assemblyInfo.FullName, $content, [System.Text.UTF8Encoding]::new($false))
+
+      - name: Build release
+        shell: pwsh
+        run: msbuild ${{ steps.app.outputs.project }} /m /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $name = '${{ steps.app.outputs.name }}'.Trim()
+          $tag = '${{ steps.version.outputs.tag }}'
+          $dir = '${{ steps.app.outputs.projectDir }}'
+          $source = Join-Path (Join-Path $dir 'bin\Release') "$name.exe"
+          if (-not (Test-Path $source)) { throw "Release executable missing: $source" }
+          New-Item -ItemType Directory -Path artifacts | Out-Null
+          $exe = "artifacts\$name-$tag.exe"
+          Copy-Item $source $exe
+          Compress-Archive -Path $source -DestinationPath "artifacts\$name-$tag.zip"
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name-$tag.exe" | Set-Content "artifacts\$name-$tag.exe.sha256" -Encoding ascii
+
+      - name: Create and verify release tag
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $existing = git ls-remote --tags origin "refs/tags/$tag"
+          if ($existing) { throw "Release tag already exists: $tag" }
+          git tag $tag HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Could not create local release tag: $tag" }
+          git push origin "refs/tags/${tag}:refs/tags/${tag}"
+          if ($LASTEXITCODE -ne 0) { throw "Could not push release tag: $tag" }
+          $remoteTag = git ls-remote --tags origin "refs/tags/$tag"
+          if (-not $remoteTag) { throw "Release tag was not found on origin after push: $tag" }
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $name = '${{ steps.app.outputs.name }}'.Trim()
+          gh release create $tag "artifacts\$name-$tag.exe" "artifacts\$name-$tag.zip" "artifacts\$name-$tag.exe.sha256" --verify-tag --title "$name $tag" --notes "Automated HSSuite release from merged PR #${{ github.event.pull_request.number }}."
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release creation failed for $tag." }
+
+      - name: Verify release, tag and assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $name = '${{ steps.app.outputs.name }}'.Trim()
+          $remoteTag = git ls-remote --tags origin "refs/tags/$tag"
+          if (-not $remoteTag) { throw "Release tag missing during verification: $tag" }
+          $release = gh release view $tag --json tagName,isDraft,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release is not readable: $tag" }
+          if ($release.tagName -ne $tag) { throw "Release tag mismatch: expected $tag, got $($release.tagName)" }
+          if ($release.isDraft) { throw "Release is still a draft: $tag" }
+          $assetNames = @($release.assets | ForEach-Object { $_.name })
+          foreach ($expected in @("$name-$tag.exe", "$name-$tag.zip", "$name-$tag.exe.sha256")) {
+            if ($assetNames -notcontains $expected) { throw "Release asset missing: $expected" }
+          }
+
+      - name: Delete version branch and verify cleanup
+        shell: pwsh
+        run: |
+          $branch = '${{ github.event.pull_request.head.ref }}'
+          $tag = '${{ steps.version.outputs.tag }}'
+          git push origin ":refs/heads/$branch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not delete version branch: $branch" }
+          git fetch --prune origin
+          $branchExists = git ls-remote --heads origin "refs/heads/$branch"
+          if ($branchExists) { throw "Version branch still exists after cleanup: $branch" }
+          $tagExists = git ls-remote --tags origin "refs/tags/$tag"
+          if (-not $tagExists) { throw "Release tag disappeared during branch cleanup: $tag" }

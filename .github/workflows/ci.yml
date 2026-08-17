@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  template-invariants:
+    name: Template invariants
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate HSSuite baseline
+        shell: pwsh
+        run: ./tests/TemplateChecks.ps1
+
+  build:
+    name: Build .NET Framework 4.7.2
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+      - name: Build Release
+        shell: pwsh
+        run: msbuild HSTemplate.sln /m /t:Rebuild /p:Configuration=Release /p:Platform="Any CPU"
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'src/HSTemplate/bin/Release/HSTemplate.exe')) { throw 'Release EXE missing.' }
+      - name: Smoke-test release asset resolution
+        shell: pwsh
+        run: |
+          $project = Get-ChildItem -Path src -Filter *.csproj -Recurse | Select-Object -First 1
+          $xml = [xml](Get-Content $project.FullName -Raw)
+          $node = $xml.SelectSingleNode("//*[local-name()='AssemblyName']")
+          $name = if ($node) { $node.InnerText.Trim() } else { $project.BaseName }
+          if ([string]::IsNullOrWhiteSpace($name)) { throw 'Resolved application name is empty.' }
+          $source = Join-Path (Join-Path $project.DirectoryName 'bin\Release') "$name.exe"
+          if (-not (Test-Path $source)) { throw "Release packaging cannot resolve executable: $source" }
+      - name: Upload CI build
+        uses: actions/upload-artifact@v4
+        with:
+          name: HSTemplate-pr-build
+          path: src/HSTemplate/bin/Release/HSTemplate.exe
+          if-no-files-found: error
