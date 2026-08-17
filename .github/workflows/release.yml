@@ -13,7 +13,8 @@ permissions:
 jobs:
   release:
     if: github.event.pull_request.merged == true
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 120
     steps:
       - name: Validate semantic version branch
         id: version
@@ -33,7 +34,7 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
           $url = "https://api.github.com/repos/${{ github.repository }}/commits/$sha/check-runs"
           $result = Invoke-RestMethod -Headers $headers -Uri $url
-          $required = @('Product invariants', 'Build .NET Framework 4.7.2')
+          $required = @('Product invariants', 'Build .NET Framework 4.7.2 x64', 'Build PDFium x64')
           foreach ($name in $required) {
             $check = $result.check_runs | Where-Object { $_.name -eq $name } | Select-Object -First 1
             if (-not $check -or $check.conclusion -ne 'success') { throw "Required check '$name' is not successful." }
@@ -73,9 +74,17 @@ jobs:
           $content = [regex]::Replace($content, 'AssemblyFileVersion\("[^"]+"\)', "AssemblyFileVersion(`"$numeric.0`")")
           [System.IO.File]::WriteAllText($assemblyInfo.FullName, $content, [System.Text.UTF8Encoding]::new($false))
 
-      - name: Build release
+      - name: Build HSPdf x64 release
         shell: pwsh
-        run: ./scripts/Build.ps1 -Target "${{ steps.app.outputs.project }}" -Configuration Release -Platform AnyCPU
+        run: ./scripts/Build.ps1 -Target "${{ steps.app.outputs.project }}" -Configuration Release -Platform x64
+
+      - name: Build pinned PDFium x64 runtime
+        shell: pwsh
+        run: ./scripts/BuildPdfium.ps1 -OutputDirectory 'artifacts\pdfium-runtime'
+
+      - name: Smoke-test PDFium runtime
+        shell: pwsh
+        run: ./scripts/TestPdfiumRuntime.ps1 -RuntimeDirectory 'artifacts\pdfium-runtime'
 
       - name: Prepare release assets
         shell: pwsh
@@ -83,14 +92,34 @@ jobs:
           $name = '${{ steps.app.outputs.name }}'.Trim()
           $tag = '${{ steps.version.outputs.tag }}'
           $dir = '${{ steps.app.outputs.projectDir }}'
-          $source = Join-Path (Join-Path $dir 'bin\Release') "$name.exe"
+          $source = Join-Path (Join-Path $dir 'bin\x64\Release') "$name.exe"
           if (-not (Test-Path $source)) { throw "Release executable missing: $source" }
-          New-Item -ItemType Directory -Path artifacts | Out-Null
-          $exe = "artifacts\$name-$tag.exe"
-          Copy-Item $source $exe
-          Compress-Archive -Path $source -DestinationPath "artifacts\$name-$tag.zip"
-          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $name-$tag.exe" | Set-Content "artifacts\$name-$tag.exe.sha256" -Encoding ascii
+
+          $runtime = 'artifacts\pdfium-runtime'
+          foreach ($required in @('pdfium.dll', 'PDFium-LICENSES.txt', 'PDFium-BUILD.txt')) {
+            if (-not (Test-Path (Join-Path $runtime $required))) { throw "PDFium release file missing: $required" }
+          }
+
+          $releaseDir = 'artifacts\release'
+          $bundleDir = 'artifacts\bundle'
+          New-Item -ItemType Directory -Force -Path $releaseDir, $bundleDir | Out-Null
+
+          $versionedExe = Join-Path $releaseDir "$name-$tag.exe"
+          Copy-Item $source $versionedExe
+          Copy-Item (Join-Path $runtime 'pdfium.dll') (Join-Path $releaseDir 'pdfium.dll')
+          Copy-Item (Join-Path $runtime 'PDFium-LICENSES.txt') (Join-Path $releaseDir 'PDFium-LICENSES.txt')
+          Copy-Item (Join-Path $runtime 'PDFium-BUILD.txt') (Join-Path $releaseDir 'PDFium-BUILD.txt')
+
+          Copy-Item $source (Join-Path $bundleDir "$name.exe")
+          Copy-Item (Join-Path $runtime 'pdfium.dll') (Join-Path $bundleDir 'pdfium.dll')
+          Copy-Item (Join-Path $runtime 'PDFium-LICENSES.txt') (Join-Path $bundleDir 'PDFium-LICENSES.txt')
+          Copy-Item (Join-Path $runtime 'PDFium-BUILD.txt') (Join-Path $bundleDir 'PDFium-BUILD.txt')
+          Compress-Archive -Path (Join-Path $bundleDir '*') -DestinationPath (Join-Path $releaseDir "$name-$tag.zip")
+
+          $exeHash = (Get-FileHash $versionedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$exeHash  $name-$tag.exe" | Set-Content (Join-Path $releaseDir "$name-$tag.exe.sha256") -Encoding ascii
+          $dllHash = (Get-FileHash (Join-Path $releaseDir 'pdfium.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$dllHash  pdfium.dll" | Set-Content (Join-Path $releaseDir 'pdfium.dll.sha256') -Encoding ascii
 
       - name: Create and verify release tag
         shell: pwsh
@@ -112,7 +141,15 @@ jobs:
         run: |
           $tag = '${{ steps.version.outputs.tag }}'
           $name = '${{ steps.app.outputs.name }}'.Trim()
-          gh release create $tag "artifacts\$name-$tag.exe" "artifacts\$name-$tag.zip" "artifacts\$name-$tag.exe.sha256" --verify-tag --title "$name $tag" --notes "Automated HSPdf release from merged PR #${{ github.event.pull_request.number }}."
+          gh release create $tag \
+            "artifacts\release\$name-$tag.exe" \
+            "artifacts\release\$name-$tag.exe.sha256" \
+            "artifacts\release\$name-$tag.zip" \
+            "artifacts\release\pdfium.dll" \
+            "artifacts\release\pdfium.dll.sha256" \
+            "artifacts\release\PDFium-LICENSES.txt" \
+            "artifacts\release\PDFium-BUILD.txt" \
+            --verify-tag --title "$name $tag" --notes "PDFium-powered HSPdf release from merged PR #${{ github.event.pull_request.number }}."
           if ($LASTEXITCODE -ne 0) { throw "GitHub Release creation failed for $tag." }
 
       - name: Verify release, tag and assets
@@ -129,7 +166,9 @@ jobs:
           if ($release.tagName -ne $tag) { throw "Release tag mismatch: expected $tag, got $($release.tagName)" }
           if ($release.isDraft) { throw "Release is still a draft: $tag" }
           $assetNames = @($release.assets | ForEach-Object { $_.name })
-          foreach ($expected in @("$name-$tag.exe", "$name-$tag.zip", "$name-$tag.exe.sha256")) {
+          foreach ($expected in @(
+            "$name-$tag.exe", "$name-$tag.exe.sha256", "$name-$tag.zip",
+            'pdfium.dll', 'pdfium.dll.sha256', 'PDFium-LICENSES.txt', 'PDFium-BUILD.txt')) {
             if ($assetNames -notcontains $expected) { throw "Release asset missing: $expected" }
           }
 
