@@ -14,6 +14,14 @@ namespace HSPdf
 {
     public partial class MainWindow
     {
+        // Keep the v0.2.x/v0.3.0 handler name as a compatibility shim for the
+        // existing toolbar/key-routing code, but route it back into HSPdf's own
+        // WPF print pipeline instead of the registered shell PDF handler.
+        private void PrintOriginalButton_Click(object sender, RoutedEventArgs e)
+        {
+            PrintButton_Click(sender, e);
+        }
+
         private sealed class PrintPdfHandle : IDisposable
         {
             public string Name;
