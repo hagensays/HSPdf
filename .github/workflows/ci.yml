@@ -52,6 +52,13 @@ jobs:
       - name: Build pinned PDFium runtime
         shell: pwsh
         run: ./scripts/BuildPdfium.ps1 -OutputDirectory 'artifacts\pdfium-runtime'
+      - name: Upload PDFium build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HSPdf-pdfium-build-log
+          path: artifacts/pdfium-build.log
+          if-no-files-found: warn
       - name: Smoke-test PDFium bridge
         shell: pwsh
         run: ./scripts/TestPdfiumRuntime.ps1 -RuntimeDirectory 'artifacts\pdfium-runtime'
