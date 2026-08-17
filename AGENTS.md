@@ -44,11 +44,12 @@ For every code change:
 - Do not add network access, telemetry, update checks, cloud features or account features.
 - Keep PDF rendering bounded: maximum requested zoom is 400% and the bitmap cache must remain small.
 - Prefer one rendered page at a time. Do not eagerly rasterize an entire document for normal viewing.
-- The active print action must hand the original PDF path to the Windows-registered PDF print handler; do not rasterize viewer output as the print source.
-- The exact print UI is owned by the registered Windows PDF handler and must not be misrepresented as HSPdf-controlled.
+- Printing uses HSPdf's own WPF/Windows print pipeline so the registered PDF application is not launched. Render pages on demand in memory and never create temporary print files.
+- `Alle drucken` must use natural filename order for top-level PDFs and place each embedded PDF attachment immediately after its parent PDF in the print sequence.
 - The folder companion list may enumerate only PDFs in the opened PDF's directory and must not recurse into subfolders.
-- Attachment discovery must remain read-only, bounded and dependency-free. Display attachment names only; do not extract embedded files unless the product scope is explicitly expanded later.
-- If the lean attachment scanner cannot confidently see an attachment in an unsupported compressed/object-stream layout, show nothing rather than adding a heavyweight parser or guessing.
+- Attachment discovery is limited to embedded PDF files. It must remain read-only, bounded and dependency-free.
+- Embedded PDF attachments may be decoded/extracted only in memory for display metadata and printing; never persist them to disk automatically.
+- Support common `Filespec`/`EmbeddedFiles` metadata in normal objects and Flate-compressed object streams. Unsupported attachment/filter layouts fail closed rather than adding a heavyweight parser or guessing.
 - Password entry, text extraction/search, annotations and editing remain outside scope unless explicitly requested later.
 
 ## Naming

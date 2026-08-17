@@ -17,7 +17,7 @@ if ($project -match '<PackageReference') {
 }
 foreach ($requiredReference in @('System.Runtime.WindowsRuntime', 'WindowsWinMdPath', '<Reference Include="Windows"', '<Reference Include="ReachFramework"')) {
     if (-not $project.Contains($requiredReference)) {
-        throw "HSPdf project is missing required reader/legacy-print build reference '$requiredReference'."
+        throw "HSPdf project is missing required reader/print build reference '$requiredReference'."
     }
 }
 foreach ($compileFile in @('MainWindow.Printing.cs', 'MainWindow.Features.cs', 'PdfAttachmentScanner.cs')) {
@@ -53,26 +53,31 @@ foreach ($fragment in @(
     'MaximumZoom = 4.0',
     'Directory.EnumerateFiles',
     'SearchOption.TopDirectoryOnly',
-    '_viewMode == ViewMode.FitHeight'
+    '_viewMode == ViewMode.FitHeight',
+    'PrintDialog',
+    'PdfPrintPaginator'
 )) {
     if (-not $readerSource.Contains($fragment)) {
-        throw "HSPdf reader invariant missing: $fragment"
+        throw "HSPdf reader/print invariant missing: $fragment"
     }
 }
 
 $printingSource = Get-Content (Join-Path $sourceRoot 'MainWindow.Printing.cs') -Raw
 foreach ($fragment in @(
-    'Verb = "print"',
-    'UseShellExecute = true',
-    'FileName = _documentPath',
-    'PrintOriginalButton_Click'
+    'PrintAllButton_Click',
+    'PdfSequencePaginator',
+    'NaturalStringComparer.Instance',
+    'PdfAttachmentScanner.ExtractPdfAttachments',
+    'OpenPrintPdfFromBytesAsync',
+    'dialog.PrintDocument',
+    'PrintButton_Click(sender, e)'
 )) {
     if (-not $printingSource.Contains($fragment)) {
-        throw "HSPdf original-PDF print invariant missing: $fragment"
+        throw "HSPdf v0.3.1 print invariant missing: $fragment"
     }
 }
-if ($printingSource.Contains('PdfPageRenderOptions') -or $printingSource.Contains('PrintDialog')) {
-    throw 'The active original-PDF print route must not rasterize the PDF or use the WPF PrintDialog.'
+if ($printingSource.Contains('Verb = "print"') -or $printingSource.Contains('UseShellExecute = true')) {
+    throw 'HSPdf must not launch the registered PDF application for printing.'
 }
 
 $featureSource = Get-Content (Join-Path $sourceRoot 'MainWindow.Features.cs') -Raw
@@ -87,26 +92,33 @@ foreach ($fragment in @(
     'Window_PreviewKeyDownV030',
     'Key.F11',
     'ToggleFullScreen',
-    'PdfAttachmentScanner.Scan(_documentPath)'
+    'PdfAttachmentScanner.Scan(_documentPath)',
+    'PrintAllButton.IsEnabled = hasDocument',
+    'PrintButton_Click(sender, new RoutedEventArgs())'
 )) {
     if (-not $featureSource.Contains($fragment)) {
-        throw "HSPdf v0.3.0 feature invariant missing: $fragment"
+        throw "HSPdf feature invariant missing: $fragment"
     }
 }
 
 $attachmentSource = Get-Content (Join-Path $sourceRoot 'PdfAttachmentScanner.cs') -Raw
 foreach ($fragment in @(
     'FileAccess.Read',
-    'SegmentBytes = 2 * 1024 * 1024',
     'MaxAttachments = 64',
-    '"/Filespec"',
+    'MaxAttachmentBytes',
+    'EndsWith(".pdf"',
     '"/EF"',
+    '"/ObjStm"',
+    'DeflateStream',
+    'ExtractPdfAttachments',
+    'LooksLikePdf',
+    'NaturalStringComparer',
     '"├─ "',
     '"└─ "',
     'PdfAttachmentTreeConverter'
 )) {
     if (-not $attachmentSource.Contains($fragment)) {
-        throw "HSPdf attachment scanner invariant missing: $fragment"
+        throw "HSPdf v0.3.1 attachment invariant missing: $fragment"
     }
 }
 
@@ -127,16 +139,18 @@ foreach ($fragment in @(
     'CopyNameButton',
     'CopyPathButton',
     'PrintButton',
+    'PrintAllButton',
+    'Click="PrintButton_Click"',
+    'Click="PrintAllButton_Click"',
     'PreviewKeyDown="Window_PreviewKeyDownV030"',
     'PreviewKeyUp="Window_PreviewKeyUpV030"',
-    'Click="PrintOriginalButton_Click"',
     'PreviewMouseLeftButtonDown="PdfCanvas_PreviewMouseLeftButtonDown"',
     'x:Name="PdfCanvas" Margin="16"',
     'BorderThickness="0,0,1,0"',
     'BorderThickness="1,0,0,0"'
 )) {
     if (-not $xaml.Contains($fragment)) {
-        throw "HSPdf v0.3.0 layout/route invariant missing: $fragment"
+        throw "HSPdf v0.3.1 layout/route invariant missing: $fragment"
     }
 }
 

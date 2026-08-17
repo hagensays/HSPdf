@@ -118,7 +118,7 @@
                                 ToolTip="90° im Uhrzeigersinn · R" Click="RotateButton_Click" />
                         <Separator Margin="0,0,0,10" />
                         <Button x:Name="PrintButton" Content="Drucken" Style="{StaticResource PdfToolbarButtonStyle}"
-                                ToolTip="Original-PDF über Windows-Druckhandler · Ctrl+P" Click="PrintOriginalButton_Click" />
+                                ToolTip="Über HSPdf/Windows-Druckdialog drucken · Ctrl+P" Click="PrintButton_Click" />
                         <Button x:Name="OpenFolderButton" Content="Ordner öffnen" Style="{StaticResource PdfToolbarButtonStyle}"
                                 ToolTip="Ordner der aktuellen PDF im Explorer öffnen" Click="OpenFolderButton_Click" />
                         <Button x:Name="CopyNameButton" Content="Name kopieren" Style="{StaticResource PdfToolbarButtonStyle}"
@@ -264,10 +264,21 @@
 
             <Border Grid.Row="2" Background="{DynamicResource HsSurfaceBrush}"
                     BorderBrush="{DynamicResource HsBorderBrush}" BorderThickness="1,1,0,0">
-                <TextBlock x:Name="ContextTextBlock" Text="Kein Dokument" FontSize="12"
-                           Margin="10,0" Foreground="{DynamicResource HsMutedTextBrush}"
-                           VerticalAlignment="Center" HorizontalAlignment="Right"
-                           TextTrimming="CharacterEllipsis" />
+                <Grid Margin="4,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="PrintAllButton" Content="Alle drucken" Height="24" MinWidth="0" Padding="8,0"
+                            FontSize="11" IsEnabled="False" VerticalAlignment="Center"
+                            Style="{StaticResource HsSecondaryButtonStyle}"
+                            ToolTip="Alle PDFs im Ordner inklusive eingebetteter PDF-Anhänge in Reihenfolge drucken"
+                            Click="PrintAllButton_Click" />
+                    <TextBlock x:Name="ContextTextBlock" Grid.Column="1" Text="Kein Dokument" FontSize="11"
+                               Margin="8,0,4,0" Foreground="{DynamicResource HsMutedTextBrush}"
+                               VerticalAlignment="Center" HorizontalAlignment="Right"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
             </Border>
         </Grid>
     </Grid>
