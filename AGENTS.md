@@ -44,7 +44,8 @@ For every code change:
 - Do not add network access, telemetry, update checks, cloud features or account features.
 - Keep PDF rendering bounded: maximum requested zoom is 400% and the bitmap cache must remain small.
 - Prefer one rendered page at a time. Do not eagerly rasterize an entire document for normal viewing.
-- Printing may rasterize pages on demand in memory for the standard Windows print pipeline, but must not create intermediate files.
+- The active print action must hand the original PDF path to the Windows-registered PDF print handler; do not rasterize viewer output as the print source.
+- The exact print UI is owned by the registered Windows PDF handler and must not be misrepresented as HSPdf-controlled.
 - The folder companion list may enumerate only PDFs in the opened PDF's directory and must not recurse into subfolders.
 - Password entry, text extraction/search, annotations and editing remain outside scope unless explicitly requested later.
 
