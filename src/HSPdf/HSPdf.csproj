@@ -74,6 +74,10 @@
     <Compile Include="MainWindow.Printing.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="MainWindow.Features.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="PdfAttachmentScanner.cs" />
     <Compile Include="Infrastructure\VersionInfo.cs" />
     <Compile Include="SuiteInfo.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
