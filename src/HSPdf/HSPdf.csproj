@@ -71,6 +71,9 @@
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="MainWindow.Printing.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Infrastructure\VersionInfo.cs" />
     <Compile Include="SuiteInfo.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
