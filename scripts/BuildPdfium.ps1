@@ -28,8 +28,6 @@ $env:PATH = "$depotTools;$env:PATH"
 $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
 $env:GYP_MSVS_VERSION = '2022'
 
-# Fetch only the pinned PDFium commit. gclient then resolves the exact DEPS set
-# for that revision. The minimal checkout intentionally omits V8 and Skia.
 git clone --filter=blob:none --no-checkout https://pdfium.googlesource.com/pdfium.git $pdfiumRoot
 if ($LASTEXITCODE -ne 0) { throw 'Could not clone PDFium.' }
 git -C $pdfiumRoot fetch --depth 1 origin $commit
@@ -72,6 +70,21 @@ $bridgeSource = Join-Path $repoRoot 'vendor\pdfium\bridge'
 $bridgeTarget = Join-Path $pdfiumRoot 'hspdf_bridge'
 Copy-Item -Recurse -Force $bridgeSource $bridgeTarget
 
+# GN only emits targets reachable from the generated graph. Add one small root
+# target which links the official complete static :pdfium target into our DLL.
+$rootBuildPath = Join-Path $pdfiumRoot 'BUILD.gn'
+$bridgeTargetText = @"
+
+# HSPdf reproducible embedder bridge. Injected by scripts/BuildPdfium.ps1.
+shared_library("hspdf_pdfium") {
+  sources = [ "hspdf_bridge/hspdf_bridge.cpp" ]
+  deps = [ ":pdfium" ]
+  include_dirs = [ "." ]
+  output_name = "pdfium"
+}
+"@
+Add-Content -Path $rootBuildPath -Value $bridgeTargetText -Encoding utf8
+
 $gnArgs = @"
 is_debug = false
 target_cpu = "x64"
@@ -93,7 +106,7 @@ Push-Location $pdfiumRoot
 try {
     gn gen out/HSPdf
     if ($LASTEXITCODE -ne 0) { throw 'PDFium GN generation failed.' }
-    autoninja -C out/HSPdf hspdf_bridge:hspdf_pdfium
+    autoninja -C out/HSPdf hspdf_pdfium
     if ($LASTEXITCODE -ne 0) { throw 'PDFium native build failed.' }
 } finally {
     Pop-Location
@@ -103,8 +116,6 @@ $dll = Get-ChildItem -Path $outDir -Filter pdfium.dll -File -Recurse | Select-Ob
 if (-not $dll) { throw 'Built pdfium.dll was not found.' }
 if ($dll.Length -lt 1MB) { throw "Built pdfium.dll is unexpectedly small: $($dll.Length) bytes" }
 
-# A local VC++ redistributable must not be required on the office PC. The
-# complete non-component build should use the static CRT. Verify the imports.
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 if (Test-Path $vswhere) {
     $vsRoot = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1)
