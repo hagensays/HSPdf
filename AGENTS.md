@@ -36,6 +36,16 @@ For every code change:
 - Do not claim runtime testing when only compilation or CI testing occurred.
 - If an important product/design decision is genuinely ambiguous, ask before choosing it.
 
+## HSPdf Product Rules
+
+- HSPdf is a read-only viewer. Never modify, rename, delete, replace or overwrite a source PDF.
+- Use the Windows-provided `Windows.Data.Pdf` renderer. Do not add a third-party PDF engine or runtime dependency without explicit approval.
+- Keep the distributed application self-contained as a single EXE; Windows SDK metadata is build-time only and must not be packaged.
+- Do not add network access, telemetry, update checks, cloud features or account features.
+- Keep PDF rendering bounded: maximum requested zoom is 400% and the bitmap cache must remain small.
+- Prefer one rendered page at a time. Do not eagerly rasterize an entire document.
+- Password entry, text extraction/search, annotations and editing are outside v0.1.0 unless explicitly requested later.
+
 ## Naming
 
 - Product repositories and executables should normally use the `HS` prefix: `HSScanner`, `HSRenamer`, `HSCompare`, etc.

@@ -5,8 +5,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{7A31A612-A3EF-4C2C-96CB-A9BFBB6CE173}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>HSTemplate</RootNamespace>
-    <AssemblyName>HSTemplate</AssemblyName>
+    <RootNamespace>HSPdf</RootNamespace>
+    <AssemblyName>HSPdf</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -37,6 +37,15 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="System.Runtime.WindowsRuntime">
+      <HintPath>$(MSBuildProgramFiles32)\Reference Assemblies\Microsoft\Framework\.NETCore\v4.5\System.Runtime.WindowsRuntime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Windows" Condition=" '$(WindowsWinMdPath)' != '' ">
+      <HintPath>$(WindowsWinMdPath)</HintPath>
+      <IsWinMDFile>true</IsWinMDFile>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -61,10 +70,12 @@
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Infrastructure\OutputPathService.cs" />
     <Compile Include="Infrastructure\VersionInfo.cs" />
     <Compile Include="SuiteInfo.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
+  <Target Name="ValidateWindowsPdfMetadata" BeforeTargets="ResolveReferences">
+    <Error Condition=" '$(WindowsWinMdPath)' == '' Or !Exists('$(WindowsWinMdPath)') " Text="WindowsWinMdPath is required. Build HSPdf through scripts\Build.ps1." />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -1,40 +1,56 @@
-# HSSuite
+# HSPdf
 
-Canonical template and design standard for small HS Windows desktop utilities.
+HSPdf is a deliberately lean, read-only PDF reader for Windows office PCs.
 
-HSSuite is deliberately **not** a monolithic application and not a shared runtime dependency. New tools are created as independent repositories from this template, then keep their own source, version history, CI and releases.
+It is designed for the common case where a PDF only needs to open quickly, stay readable and respond immediately to keyboard input. It does not try to reproduce Acrobat's editing, cloud, annotation or account features.
 
-## Intended environment
+## v0.1.0 scope
 
-- Windows 10 Enterprise/LTSC-class office machines
-- WPF on .NET Framework 4.7.2
-- no WinUI 3 requirement
-- no NuGet/runtime dependencies by default
-- self-contained application folder
-- generated output defaults to the folder containing the running EXE
-- generated files must not overwrite existing files
+- native WPF shell on .NET Framework 4.7.2
+- PDF rendering through the Windows 10 `Windows.Data.Pdf` API
+- one-page viewer with a narrow side action bar
+- open PDF from the file picker, drag/drop or command line
+- previous/next page navigation
+- mouse-wheel page navigation at page edges
+- zoom from 10% to 400%
+- fit height and fit width modes
+- clockwise 90-degree view rotation
+- small in-memory cache for recently rendered pages
+- no network access
+- no writes to the source PDF
 
-## New app flow
+## Keyboard shortcuts
 
-1. Create a new repository from this GitHub template.
-2. Run `scripts/Initialize-App.ps1 -AppName HSWhatever -Description "..."`, or have the coding agent perform the equivalent rename.
-3. Read `AGENTS.md`, `SUITE_STANDARD.md` and `DESIGN_SYSTEM.md` before implementation.
-4. Build the actual product on a semantic-version branch such as `v0.1.0`.
-5. PR → CI → merge → automatic release → verification → cleanup.
+| Action | Shortcut |
+| --- | --- |
+| Open PDF | `Ctrl+O` |
+| Previous page | `Page Up` or `Left` |
+| Next page | `Page Down` or `Right` |
+| Zoom in | `+` |
+| Zoom out | `-` |
+| Fit height | `H` |
+| Fit width | `W` |
+| Rotate clockwise | `R` |
+| First page | `Home` |
+| Last page | `End` |
+| Zoom with mouse | `Ctrl+Mouse Wheel` |
 
-## Template contents
+## Compatibility and dependencies
 
-- a compilable WPF starter shell
-- canonical colors, spacing and control styles
-- standard header, workspace and status bar
-- local-output/non-overwrite helper
-- universal suite rules
-- CI and release workflows
-- template validation checks
-- initialization script
+Runtime target: Windows 10 1809/LTSC 2019 or newer with .NET Framework 4.7.2 or newer.
 
-## Important distinction
+HSPdf does not ship a third-party PDF engine. The executable calls the PDF renderer built into Windows through `Windows.Data.Pdf`. The Windows SDK metadata is required only when building the source; release users receive a single EXE.
 
-Universal suite rules belong here. Product-specific rules belong in the individual application repo. For example, HSScanner can be read-only while a future HSRenamer is allowed to rename files.
+Build with:
 
-See `TEMPLATE_USAGE.md` for the exact creation workflow.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1
+```
+
+## Safety model
+
+HSPdf opens source PDFs with read access only. It does not edit, rename, delete or overwrite source files and does not write application state to `%TEMP%`, `%APPDATA%` or `%LOCALAPPDATA%`.
+
+## Deliberate v0.1.0 limitations
+
+No text selection/search, annotations, form editing, password entry or printing. These are intentionally outside the first release so the reader stays small and fast. Password-protected or malformed PDFs fail with a short user-facing error instead of attempting recovery.
