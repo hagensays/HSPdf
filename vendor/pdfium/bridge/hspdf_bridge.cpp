@@ -1,11 +1,12 @@
+#define NOMINMAX
 #include <windows.h>
 
-#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <mutex>
-#include <vector>
+#include <new>
 
 #include "public/fpdf_attachment.h"
 #include "public/fpdfview.h"
@@ -18,7 +19,8 @@ bool g_initialized = false;
 struct DocumentHolder {
   FPDF_DOCUMENT document = nullptr;
   HANDLE file = INVALID_HANDLE_VALUE;
-  std::vector<unsigned char> memory;
+  std::unique_ptr<unsigned char[]> memory;
+  size_t memory_size = 0;
   FPDF_FILEACCESS access = {};
 
   ~DocumentHolder() {
@@ -32,6 +34,11 @@ struct DocumentHolder {
     }
   }
 };
+
+std::unique_ptr<DocumentHolder> MakeHolder() {
+  return std::unique_ptr<DocumentHolder>(
+      new (std::nothrow) DocumentHolder());
+}
 
 int GetFileBlock(void* parameter,
                  unsigned long position,
@@ -98,7 +105,11 @@ __declspec(dllexport) void* HSPDF_OpenDocument(const wchar_t* path) {
     return nullptr;
   }
 
-  auto holder = std::make_unique<DocumentHolder>();
+  auto holder = MakeHolder();
+  if (!holder) {
+    return nullptr;
+  }
+
   holder->file = CreateFileW(path, GENERIC_READ,
                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                              nullptr, OPEN_EXISTING,
@@ -134,15 +145,20 @@ __declspec(dllexport) void* HSPDF_OpenDocumentMemory(
     return nullptr;
   }
 
-  auto holder = std::make_unique<DocumentHolder>();
-  try {
-    holder->memory.assign(data, data + static_cast<size_t>(length));
-  } catch (...) {
+  auto holder = MakeHolder();
+  if (!holder) {
     return nullptr;
   }
 
-  holder->document = FPDF_LoadMemDocument64(holder->memory.data(),
-                                             holder->memory.size(), nullptr);
+  holder->memory_size = static_cast<size_t>(length);
+  holder->memory.reset(new (std::nothrow) unsigned char[holder->memory_size]);
+  if (!holder->memory) {
+    return nullptr;
+  }
+  std::memcpy(holder->memory.get(), data, holder->memory_size);
+
+  holder->document = FPDF_LoadMemDocument64(holder->memory.get(),
+                                             holder->memory_size, nullptr);
   if (!holder->document) {
     return nullptr;
   }
@@ -235,9 +251,11 @@ __declspec(dllexport) int HSPDF_RenderPage(void* handle,
 __declspec(dllexport) int HSPDF_GetAttachmentCount(void* handle) {
   std::lock_guard<std::recursive_mutex> lock(g_pdfium_mutex);
   auto* holder = AsHolder(handle);
-  return holder && holder->document
-             ? std::max(0, FPDFDoc_GetAttachmentCount(holder->document))
-             : 0;
+  if (!holder || !holder->document) {
+    return 0;
+  }
+  const int count = FPDFDoc_GetAttachmentCount(holder->document);
+  return count > 0 ? count : 0;
 }
 
 __declspec(dllexport) int HSPDF_GetAttachmentName(void* handle,
