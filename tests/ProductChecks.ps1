@@ -20,8 +20,10 @@ foreach ($requiredReference in @('System.Runtime.WindowsRuntime', 'WindowsWinMdP
         throw "HSPdf project is missing required reader/legacy-print build reference '$requiredReference'."
     }
 }
-if (-not $project.Contains('<Compile Include="MainWindow.Printing.cs">')) {
-    throw 'HSPdf project must compile the active original-PDF print routing.'
+foreach ($compileFile in @('MainWindow.Printing.cs', 'MainWindow.Features.cs', 'PdfAttachmentScanner.cs')) {
+    if (-not $project.Contains("<Compile Include=\"$compileFile\"")) {
+        throw "HSPdf project must compile $compileFile."
+    }
 }
 
 $sourceFiles = Get-ChildItem $sourceRoot -Recurse -File | Where-Object { $_.Extension -in '.cs', '.xaml' }
@@ -36,7 +38,7 @@ foreach ($needle in @('File.Delete(', 'File.Move(', 'File.WriteAll', 'FileAccess
     }
 }
 
-foreach ($required in @('Themes\Colors.xaml', 'Themes\Controls.xaml', 'MainWindow.xaml', 'MainWindow.Printing.cs')) {
+foreach ($required in @('Themes\Colors.xaml', 'Themes\Controls.xaml', 'MainWindow.xaml', 'MainWindow.Printing.cs', 'MainWindow.Features.cs', 'PdfAttachmentScanner.cs')) {
     if (-not (Test-Path (Join-Path $sourceRoot $required))) {
         throw "Required HSPdf file missing: $required"
     }
@@ -62,7 +64,6 @@ foreach ($fragment in @(
     'Verb = "print"',
     'UseShellExecute = true',
     'FileName = _documentPath',
-    'Window_PreviewKeyDownV021',
     'PrintOriginalButton_Click'
 )) {
     if (-not $printingSource.Contains($fragment)) {
@@ -70,25 +71,71 @@ foreach ($fragment in @(
     }
 }
 if ($printingSource.Contains('PdfPageRenderOptions') -or $printingSource.Contains('PrintDialog')) {
-    throw 'The active v0.2.1 print route must not rasterize the PDF or use the WPF PrintDialog.'
+    throw 'The active original-PDF print route must not rasterize the PDF or use the WPF PrintDialog.'
+}
+
+$featureSource = Get-Content (Join-Path $sourceRoot 'MainWindow.Features.cs') -Raw
+foreach ($fragment in @(
+    'CurrentPageTextBox_KeyDown',
+    'OpenFolderButton_Click',
+    'CopyNameButton_Click',
+    'CopyPathButton_Click',
+    'PdfCanvas_PreviewMouseLeftButtonDown',
+    'PdfScrollViewer_PreviewMouseDownV030',
+    'Cursors.ScrollAll',
+    'Window_PreviewKeyDownV030',
+    'Key.F11',
+    'ToggleFullScreen',
+    'PdfAttachmentScanner.Scan(_documentPath)'
+)) {
+    if (-not $featureSource.Contains($fragment)) {
+        throw "HSPdf v0.3.0 feature invariant missing: $fragment"
+    }
+}
+
+$attachmentSource = Get-Content (Join-Path $sourceRoot 'PdfAttachmentScanner.cs') -Raw
+foreach ($fragment in @(
+    'FileAccess.Read',
+    'SegmentBytes = 2 * 1024 * 1024',
+    'MaxAttachments = 64',
+    '"/Filespec"',
+    '"/EF"',
+    '"├─ "',
+    '"└─ "',
+    'PdfAttachmentTreeConverter'
+)) {
+    if (-not $attachmentSource.Contains($fragment)) {
+        throw "HSPdf attachment scanner invariant missing: $fragment"
+    }
 }
 
 $xaml = Get-Content (Join-Path $sourceRoot 'MainWindow.xaml') -Raw
 foreach ($fragment in @(
     'LeftSidebarColumn',
     'RightSidebarColumn',
+    'LeftSplitterColumn',
+    'RightSplitterColumn',
     'LeftResizeHandle',
     'RightResizeHandle',
     'FolderPdfListBox',
+    'CurrentPdfNameTextBlock',
+    'CurrentPdfAttachmentTextBlock',
+    'PdfAttachmentTreeConverter',
+    'CurrentPageTextBox',
+    'OpenFolderButton',
+    'CopyNameButton',
+    'CopyPathButton',
     'PrintButton',
-    'PreviewKeyDown="Window_PreviewKeyDownV021"',
+    'PreviewKeyDown="Window_PreviewKeyDownV030"',
+    'PreviewKeyUp="Window_PreviewKeyUpV030"',
     'Click="PrintOriginalButton_Click"',
+    'PreviewMouseLeftButtonDown="PdfCanvas_PreviewMouseLeftButtonDown"',
     'x:Name="PdfCanvas" Margin="16"',
     'BorderThickness="0,0,1,0"',
     'BorderThickness="1,0,0,0"'
 )) {
     if (-not $xaml.Contains($fragment)) {
-        throw "HSPdf v0.2.1 layout/route invariant missing: $fragment"
+        throw "HSPdf v0.3.0 layout/route invariant missing: $fragment"
     }
 }
 
