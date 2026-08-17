@@ -1,4 +1,5 @@
 using HSPdf.Infrastructure;
+using HSPdf.Pdfium;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -8,13 +9,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using Windows.Data.Pdf;
-using Windows.Storage.Streams;
 
 namespace HSPdf
 {
@@ -39,92 +37,6 @@ namespace HSPdf
             public string Path { get; private set; }
         }
 
-        private sealed class PdfPrintPaginator : DocumentPaginator
-        {
-            private const double PrintMargin = 24.0;
-            private const double PrintRenderScale = 2.0;
-            private const double MaxPrintRenderPixels = 16000000.0;
-
-            private readonly PdfDocument _document;
-            private Size _pageSize;
-
-            public PdfPrintPaginator(PdfDocument document, Size pageSize)
-            {
-                _document = document;
-                _pageSize = pageSize;
-            }
-
-            public override bool IsPageCountValid
-            {
-                get { return true; }
-            }
-
-            public override int PageCount
-            {
-                get { return checked((int)_document.PageCount); }
-            }
-
-            public override Size PageSize
-            {
-                get { return _pageSize; }
-                set { _pageSize = value; }
-            }
-
-            public override IDocumentPaginatorSource Source
-            {
-                get { return null; }
-            }
-
-            public override DocumentPage GetPage(int pageNumber)
-            {
-                if (pageNumber < 0 || pageNumber >= PageCount)
-                {
-                    return DocumentPage.Missing;
-                }
-
-                using (PdfPage page = _document.GetPage((uint)pageNumber))
-                {
-                    double availableWidth = Math.Max(1.0, PageSize.Width - (PrintMargin * 2.0));
-                    double availableHeight = Math.Max(1.0, PageSize.Height - (PrintMargin * 2.0));
-                    double pageWidth = Math.Max(1.0, page.Size.Width);
-                    double pageHeight = Math.Max(1.0, page.Size.Height);
-                    double scale = Math.Min(availableWidth / pageWidth, availableHeight / pageHeight);
-                    double drawWidth = pageWidth * scale;
-                    double drawHeight = pageHeight * scale;
-
-                    double renderWidth = drawWidth * PrintRenderScale;
-                    double renderHeight = drawHeight * PrintRenderScale;
-                    double pixels = renderWidth * renderHeight;
-                    if (pixels > MaxPrintRenderPixels)
-                    {
-                        double correction = Math.Sqrt(MaxPrintRenderPixels / pixels);
-                        renderWidth *= correction;
-                        renderHeight *= correction;
-                    }
-
-                    BitmapSource bitmap = RenderPageBitmapAsync(
-                        page,
-                        (uint)Math.Max(1.0, Math.Round(renderWidth)),
-                        (uint)Math.Max(1.0, Math.Round(renderHeight))).GetAwaiter().GetResult();
-
-                    double x = (PageSize.Width - drawWidth) / 2.0;
-                    double y = (PageSize.Height - drawHeight) / 2.0;
-                    var visual = new DrawingVisual();
-                    using (DrawingContext drawing = visual.RenderOpen())
-                    {
-                        drawing.DrawRectangle(Brushes.White, null, new Rect(new Point(0, 0), PageSize));
-                        drawing.DrawImage(bitmap, new Rect(x, y, drawWidth, drawHeight));
-                    }
-
-                    return new DocumentPage(
-                        visual,
-                        PageSize,
-                        new Rect(new Point(0, 0), PageSize),
-                        new Rect(x, y, drawWidth, drawHeight));
-                }
-            }
-        }
-
         private const double MinimumManualZoom = 0.10;
         private const double MaximumZoom = 4.0;
         private const double ZoomStep = 1.15;
@@ -139,9 +51,7 @@ namespace HSPdf
         private readonly Dictionary<string, BitmapSource> _renderCache = new Dictionary<string, BitmapSource>();
         private readonly Queue<string> _cacheOrder = new Queue<string>();
 
-        private PdfDocument _document;
-        private FileStream _documentFileStream;
-        private IRandomAccessStream _documentRandomAccessStream;
+        private PdfiumDocument _document;
         private string _documentPath;
         private uint _pageIndex;
         private ViewMode _viewMode = ViewMode.FitHeight;
@@ -234,24 +144,16 @@ namespace HSPdf
                 return;
             }
 
-            StatusTextBlock.Text = "PDF wird geöffnet…";
-            FileStream fileStream = null;
-            IRandomAccessStream randomAccessStream = null;
-
+            StatusTextBlock.Text = "PDF wird mit PDFium geöffnet…";
+            PdfiumDocument document = null;
             try
             {
-                fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                randomAccessStream = fileStream.AsRandomAccessStream();
-                PdfDocument document = await PdfDocument.LoadFromStreamAsync(randomAccessStream).AsTask();
-                if (document.PageCount == 0)
-                {
-                    throw new InvalidDataException("PDF contains no pages.");
-                }
+                document = await Task.Run(() => PdfiumDocument.Open(path));
 
+                Interlocked.Increment(ref _renderRequest);
                 DisposeDocument();
                 _document = document;
-                _documentFileStream = fileStream;
-                _documentRandomAccessStream = randomAccessStream;
+                document = null;
                 _documentPath = path;
                 _pageIndex = 0;
                 _viewMode = ViewMode.FitHeight;
@@ -265,17 +167,17 @@ namespace HSPdf
                 UpdateUiState();
                 await RenderCurrentPageAsync();
             }
+            catch (PdfiumUnavailableException exception)
+            {
+                document?.Dispose();
+                StatusTextBlock.Text = "PDFium ist nicht verfügbar";
+                MessageBox.Show(this,
+                    exception.Message + "\n\nHSPdf.exe und pdfium.dll müssen im selben Ordner liegen.",
+                    "HSPdf", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             catch (Exception)
             {
-                if (!ReferenceEquals(randomAccessStream, _documentRandomAccessStream))
-                {
-                    randomAccessStream?.Dispose();
-                }
-                if (!ReferenceEquals(fileStream, _documentFileStream))
-                {
-                    fileStream?.Dispose();
-                }
-
+                document?.Dispose();
                 StatusTextBlock.Text = "PDF konnte nicht geöffnet werden";
                 MessageBox.Show(this,
                     "Die PDF konnte nicht geöffnet werden. Die Datei ist eventuell passwortgeschützt, beschädigt oder nicht zugreifbar.",
@@ -285,11 +187,12 @@ namespace HSPdf
 
         private void DisposeDocument()
         {
+            PdfiumDocument document = _document;
             _document = null;
-            _documentRandomAccessStream?.Dispose();
-            _documentRandomAccessStream = null;
-            _documentFileStream?.Dispose();
-            _documentFileStream = null;
+            if (document != null)
+            {
+                document.Dispose();
+            }
             ClearCache();
         }
 
@@ -301,14 +204,14 @@ namespace HSPdf
 
         private async Task RenderCurrentPageAsync()
         {
-            PdfDocument document = _document;
+            PdfiumDocument document = _document;
             if (document == null || _pageIndex >= document.PageCount)
             {
                 return;
             }
 
             int request = Interlocked.Increment(ref _renderRequest);
-            StatusTextBlock.Text = string.Format("Seite {0} wird gerendert…", _pageIndex + 1);
+            StatusTextBlock.Text = string.Format("Seite {0} wird mit PDFium gerendert…", _pageIndex + 1);
             await _renderGate.WaitAsync();
 
             try
@@ -318,19 +221,23 @@ namespace HSPdf
                     return;
                 }
 
-                uint width;
-                uint height;
+                int width;
+                int height;
                 double scale;
+                Size pageSize = document.GetPageSizeDip(_pageIndex);
+                CalculateRenderSize(pageSize, out width, out height, out scale);
+
+                string cacheKey = string.Format("{0}:{1}x{2}:r{3}", _pageIndex, width, height, _rotationDegrees);
                 BitmapSource bitmap;
-                using (PdfPage page = document.GetPage(_pageIndex))
+                if (!_renderCache.TryGetValue(cacheKey, out bitmap))
                 {
-                    CalculateRenderSize(page, out width, out height, out scale);
-                    string cacheKey = string.Format("{0}:{1}x{2}", _pageIndex, width, height);
-                    if (!_renderCache.TryGetValue(cacheKey, out bitmap))
-                    {
-                        bitmap = await RenderPageBitmapAsync(page, width, height);
-                        AddToCache(cacheKey, bitmap);
-                    }
+                    bitmap = await document.RenderPageAsync(
+                        _pageIndex,
+                        width,
+                        height,
+                        (_rotationDegrees / 90) % 4,
+                        false);
+                    AddToCache(cacheKey, bitmap);
                 }
 
                 if (request != _renderRequest || !ReferenceEquals(document, _document))
@@ -340,10 +247,14 @@ namespace HSPdf
 
                 _effectiveZoom = scale;
                 PdfImage.Source = bitmap;
-                PdfImage.LayoutTransform = new RotateTransform(_rotationDegrees);
+                PdfImage.LayoutTransform = Transform.Identity;
                 PageBorder.Visibility = Visibility.Visible;
                 EmptyStatePanel.Visibility = Visibility.Collapsed;
                 UpdateUiState();
+            }
+            catch (ObjectDisposedException)
+            {
+                // A newer document replaced this render request.
             }
             catch (Exception)
             {
@@ -358,36 +269,10 @@ namespace HSPdf
             }
         }
 
-        private static async Task<BitmapSource> RenderPageBitmapAsync(PdfPage page, uint width, uint height)
+        private void CalculateRenderSize(Size pageSize, out int width, out int height, out double scale)
         {
-            using (var output = new InMemoryRandomAccessStream())
-            {
-                var options = new PdfPageRenderOptions
-                {
-                    DestinationWidth = width,
-                    DestinationHeight = height,
-                    IsIgnoringHighContrast = true
-                };
-
-                await page.RenderToStreamAsync(output, options).AsTask().ConfigureAwait(false);
-                output.Seek(0);
-                using (Stream stream = output.AsStreamForRead())
-                {
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-                    bitmap.Freeze();
-                    return bitmap;
-                }
-            }
-        }
-
-        private void CalculateRenderSize(PdfPage page, out uint width, out uint height, out double scale)
-        {
-            double pageWidth = Math.Max(1.0, page.Size.Width);
-            double pageHeight = Math.Max(1.0, page.Size.Height);
+            double pageWidth = Math.Max(1.0, pageSize.Width);
+            double pageHeight = Math.Max(1.0, pageSize.Height);
             bool quarterTurn = (_rotationDegrees % 180) != 0;
             double layoutWidth = quarterTurn ? pageHeight : pageWidth;
             double layoutHeight = quarterTurn ? pageWidth : pageHeight;
@@ -413,8 +298,8 @@ namespace HSPdf
             double minimum = _viewMode == ViewMode.Manual ? MinimumManualZoom : 0.05;
             scale = Math.Max(minimum, Math.Min(MaximumZoom, scale));
 
-            double renderWidth = pageWidth * scale;
-            double renderHeight = pageHeight * scale;
+            double renderWidth = layoutWidth * scale;
+            double renderHeight = layoutHeight * scale;
             double pixels = renderWidth * renderHeight;
             if (pixels > MaxRenderPixels)
             {
@@ -424,8 +309,8 @@ namespace HSPdf
                 renderHeight *= correction;
             }
 
-            width = (uint)Math.Max(1.0, Math.Round(renderWidth));
-            height = (uint)Math.Max(1.0, Math.Round(renderHeight));
+            width = checked((int)Math.Max(1.0, Math.Round(renderWidth)));
+            height = checked((int)Math.Max(1.0, Math.Round(renderHeight)));
         }
 
         private void AddToCache(string key, BitmapSource bitmap)
@@ -457,7 +342,7 @@ namespace HSPdf
                 return;
             }
 
-            _pageIndex = (uint)target;
+            _pageIndex = checked((uint)target);
             PdfScrollViewer.ScrollToHome();
             UpdateUiState();
             await RenderCurrentPageAsync();
@@ -528,7 +413,7 @@ namespace HSPdf
             {
                 List<FolderPdfItem> items = Directory.EnumerateFiles(directory, "*.pdf", SearchOption.TopDirectoryOnly)
                     .Where(path => !string.Equals(path, _documentPath, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(path => Path.GetFileName(path), StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(path => Path.GetFileName(path), NaturalStringComparer.Instance)
                     .Select(path => new FolderPdfItem(path))
                     .ToList();
 
@@ -678,46 +563,6 @@ namespace HSPdf
         private async void RotateButton_Click(object sender, RoutedEventArgs e)
         {
             await RotateAsync();
-        }
-
-        private void PrintButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_document == null)
-            {
-                return;
-            }
-
-            var dialog = new PrintDialog();
-            if (dialog.ShowDialog() != true)
-            {
-                return;
-            }
-
-            double pageWidth = dialog.PrintableAreaWidth;
-            double pageHeight = dialog.PrintableAreaHeight;
-            if (double.IsNaN(pageWidth) || double.IsInfinity(pageWidth) || pageWidth <= 0)
-            {
-                pageWidth = 816.0;
-            }
-            if (double.IsNaN(pageHeight) || double.IsInfinity(pageHeight) || pageHeight <= 0)
-            {
-                pageHeight = 1056.0;
-            }
-
-            try
-            {
-                StatusTextBlock.Text = "Druck wird vorbereitet…";
-                var paginator = new PdfPrintPaginator(_document, new Size(pageWidth, pageHeight));
-                dialog.PrintDocument(paginator, Path.GetFileName(_documentPath));
-                StatusTextBlock.Text = "Druckauftrag gesendet";
-            }
-            catch (Exception)
-            {
-                StatusTextBlock.Text = "Drucken fehlgeschlagen";
-                MessageBox.Show(this,
-                    "Das Dokument konnte nicht gedruckt werden.",
-                    "HSPdf", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
         }
 
         private void PdfScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
