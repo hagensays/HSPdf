@@ -61,6 +61,7 @@ namespace HSPdf
             CopyNameButton.IsEnabled = hasDocument;
             CopyPathButton.IsEnabled = hasDocument;
             CurrentPageTextBox.IsEnabled = hasDocument;
+            PrintAllButton.IsEnabled = hasDocument;
 
             if (!hasDocument)
             {
@@ -285,7 +286,7 @@ namespace HSPdf
             if (control && e.Key == Key.P)
             {
                 e.Handled = true;
-                PrintOriginalButton_Click(sender, new RoutedEventArgs());
+                PrintButton_Click(sender, new RoutedEventArgs());
                 return;
             }
 
