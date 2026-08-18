@@ -39,21 +39,25 @@ For every code change:
 ## HSPdf Product Rules
 
 - HSPdf is a read-only viewer. Never modify, rename, delete, replace or overwrite a source PDF.
-- Use the Windows-provided `Windows.Data.Pdf` renderer. Do not add a third-party PDF engine or runtime dependency without explicit approval.
-- Keep the distributed application self-contained as a single EXE; Windows SDK metadata is build-time only and must not be packaged.
-- Do not add network access, telemetry, update checks, cloud features or account features.
-- Keep PDF rendering bounded: maximum requested zoom is 400% and the bitmap cache must remain small.
+- PDFium is the explicitly approved PDF engine from v0.4.0 onward. Do not reintroduce `Windows.Data.Pdf` or add a second PDF engine without a concrete need.
+- Build PDFium only from the official `pdfium.googlesource.com/pdfium.git` source at the exact commit pinned in `vendor/pdfium/PDFIUM_COMMIT.txt`. Do not substitute an arbitrary prebuilt DLL.
+- The runtime architecture is x64 because the bundled native `pdfium.dll` is x64. HSPdf remains WPF on .NET Framework 4.7.2.
+- The distributable runtime is `HSPdf.exe` + `pdfium.dll` + PDFium license/build notices. No installer, NuGet package, separately installed VC++ runtime or admin action may be required.
+- Keep PDFium configured lean for HSPdf: V8/JavaScript off, XFA off, Skia off unless a future feature explicitly requires one of them.
+- Do not add network access, telemetry, update checks, cloud features or account features. PDFium acquisition is build-time only; HSPdf must never download it at runtime.
+- Keep PDF rendering bounded: maximum requested zoom is 400%, render pixel counts are capped and the bitmap cache remains small.
 - Prefer one rendered page at a time. Do not eagerly rasterize an entire document for normal viewing.
-- Printing uses HSPdf's own WPF/Windows print pipeline so the registered PDF application is not launched. Render pages on demand in memory and never create temporary print files.
-- `Alle drucken` must use natural filename order for top-level PDFs and place each embedded PDF attachment immediately after its parent PDF in the print sequence.
+- All PDFium API access must remain serialized because PDFium's embedder API is not thread-safe. The native bridge owns this serialization.
+- Printing uses HSPdf's WPF/Windows print dialog and PDFium's printing render mode. Do not launch Adobe or another registered PDF application and do not create temporary print files.
+- `Alle drucken` uses natural filename order for top-level PDFs and places each embedded PDF attachment immediately after its parent PDF in the print sequence.
 - The folder companion list may enumerate only PDFs in the opened PDF's directory and must not recurse into subfolders.
-- Attachment discovery is limited to embedded PDF files. It must remain read-only, bounded and dependency-free.
-- Embedded PDF attachments may be decoded/extracted only in memory for display metadata and printing; never persist them to disk automatically.
-- Support common `Filespec`/`EmbeddedFiles` metadata in normal objects and Flate-compressed object streams. Unsupported attachment/filter layouts fail closed rather than adding a heavyweight parser or guessing.
-- Password entry, text extraction/search, annotations and editing remain outside scope unless explicitly requested later.
+- Attachment discovery uses PDFium's embedded-file API and is limited to embedded files whose names end in `.pdf`.
+- Embedded PDF attachments may be extracted only in memory for display metadata and printing; never persist them to disk automatically.
+- Password entry, text extraction/search, annotations and editing remain outside the current UI scope unless explicitly requested later, even though PDFium can enable future work in those areas.
 
 ## Naming
 
 - Product repositories and executables should normally use the `HS` prefix: `HSScanner`, `HSRenamer`, `HSCompare`, etc.
 - Release branches: `vMAJOR.MINOR.PATCH`.
-- Public release asset: `<AppName>-vMAJOR.MINOR.PATCH.exe`.
+- Public release executable: `<AppName>-vMAJOR.MINOR.PATCH.exe`.
+- PDFium runtime asset: `pdfium.dll` plus `PDFium-LICENSES.txt` and `PDFium-BUILD.txt`.

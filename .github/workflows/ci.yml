@@ -19,33 +19,58 @@ jobs:
         run: ./tests/ProductChecks.ps1
 
   build:
-    name: Build .NET Framework 4.7.2
+    name: Build .NET Framework 4.7.2 x64
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
-      - name: Build Release
+      - name: Build Release x64
         shell: pwsh
-        run: ./scripts/Build.ps1 -Configuration Release -Platform 'Any CPU'
+        run: ./scripts/Build.ps1 -Configuration Release -Platform x64
       - name: Verify executable
         shell: pwsh
         run: |
-          if (-not (Test-Path 'src/HSPdf/bin/Release/HSPdf.exe')) { throw 'Release EXE missing.' }
-      - name: Smoke-test release asset resolution
-        shell: pwsh
-        run: |
-          $project = Get-ChildItem -Path src -Filter *.csproj -Recurse | Select-Object -First 1
-          $xml = [xml](Get-Content $project.FullName -Raw)
-          $node = $xml.SelectSingleNode("//*[local-name()='AssemblyName']")
-          $name = if ($node) { $node.InnerText.Trim() } else { $project.BaseName }
-          if ([string]::IsNullOrWhiteSpace($name)) { throw 'Resolved application name is empty.' }
-          $source = Join-Path (Join-Path $project.DirectoryName 'bin\Release') "$name.exe"
-          if (-not (Test-Path $source)) { throw "Release packaging cannot resolve executable: $source" }
+          if (-not (Test-Path 'src/HSPdf/bin/x64/Release/HSPdf.exe')) { throw 'Release EXE missing.' }
       - name: Upload CI build
         uses: actions/upload-artifact@v4
         with:
           name: HSPdf-pr-build
-          path: src/HSPdf/bin/Release/HSPdf.exe
+          path: src/HSPdf/bin/x64/Release/HSPdf.exe
+          if-no-files-found: error
+
+  pdfium:
+    name: Build PDFium x64
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+      - name: Build pinned PDFium runtime
+        shell: pwsh
+        run: ./scripts/BuildPdfium.ps1 -OutputDirectory 'artifacts\pdfium-runtime'
+      - name: Upload PDFium build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HSPdf-pdfium-build-log
+          path: artifacts/pdfium-build.log
+          if-no-files-found: warn
+      - name: Smoke-test PDFium bridge
+        shell: pwsh
+        run: ./scripts/TestPdfiumRuntime.ps1 -RuntimeDirectory 'artifacts\pdfium-runtime'
+      - name: Verify PDFium runtime files
+        shell: pwsh
+        run: |
+          foreach ($file in @('pdfium.dll', 'PDFium-LICENSES.txt', 'PDFium-BUILD.txt')) {
+            if (-not (Test-Path (Join-Path 'artifacts\pdfium-runtime' $file))) { throw "PDFium runtime file missing: $file" }
+          }
+      - name: Upload PDFium runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: HSPdf-pdfium-runtime
+          path: artifacts/pdfium-runtime/*
           if-no-files-found: error

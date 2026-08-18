@@ -2,31 +2,31 @@
 
 HSPdf is a deliberately lean, read-only PDF reader for Windows office PCs.
 
-It is designed for the common case where a PDF only needs to open quickly, stay readable and respond immediately to keyboard input. It does not try to reproduce Acrobat's editing, cloud, annotation or account features.
+It is designed for the common case where a PDF only needs to open quickly, stay readable and respond immediately to keyboard input. From v0.4.0 onward the PDF engine is PDFium rather than `Windows.Data.Pdf`.
 
-## v0.3.1 scope
+## v0.4.0 scope
 
-- native WPF shell on .NET Framework 4.7.2
-- PDF rendering through the Windows 10 `Windows.Data.Pdf` API
+- native x64 WPF shell on .NET Framework 4.7.2
+- rendering, page geometry, embedded-file discovery and print rendering through a pinned PDFium build
+- local `pdfium.dll`; no installer, admin rights, NuGet package or runtime download
 - center-only PDF viewport with equal, jointly resizable left/right side panels
 - split HSSuite header and footer aligned to the side-panel edges
 - left panel: open, page jump, navigation, zoom, fit, rotate, print, open folder, copy filename, copy full path
 - right panel always shows the current PDF first, then a separator, then the other PDFs in the same folder
-- embedded **PDF** attachments are shown as indented `├─` / `└─` children below their parent PDF
-- attachment metadata in common Flate-compressed PDF object streams is supported without adding a third-party PDF library
+- embedded **PDF** attachments are read through PDFium and shown as indented `├─` / `└─` children below their parent PDF
 - double-click the page to toggle Fit Width / Fit Height
 - pan a zoomed page with middle-mouse drag or Space + left-drag
-- tap Space without dragging to keep the existing next-page behavior
+- tap Space without dragging to keep the next-page behavior
 - `F11` toggles a PDF-only fullscreen view; `Esc` leaves fullscreen
 - Fit Height and Fit Width reserve enough viewport space to avoid residual fit-mode scrollbars
-- printing uses HSPdf's own Windows/WPF print dialog and does not launch Adobe or another registered PDF application
+- printing uses the normal HSPdf/WPF Windows print dialog and PDFium's printing render mode; Adobe is not launched
 - `Alle drucken` prints every PDF in the current folder in natural filename order and inserts each embedded PDF attachment immediately after its parent PDF
-- embedded PDF attachments are decoded only in memory for printing; no temporary attachment files are created
+- embedded PDF attachments are extracted only in memory for printing; no temporary attachment files are created
 - open PDF from the file picker, drag/drop or command line
 - zoom from 10% to 400%
-- clockwise 90-degree view rotation
+- clockwise 90-degree view rotation rendered by PDFium
 - small in-memory cache for recently rendered pages
-- no network access
+- no network access at runtime
 - no writes to the source PDF
 
 ## Print order
@@ -67,26 +67,43 @@ Top-level filenames and attachment filenames use natural numeric ordering.
 | Last page | `End` |
 | Zoom with mouse | `Ctrl+Mouse Wheel` |
 
-## Compatibility and dependencies
+## Compatibility and runtime files
 
-Runtime target: Windows 10 1809/LTSC 2019 or newer with .NET Framework 4.7.2 or newer.
+Runtime target: 64-bit Windows 10 1809/LTSC 2019 or newer with .NET Framework 4.7.2 or newer.
 
-HSPdf does not ship a third-party PDF engine. The executable calls the PDF renderer built into Windows through `Windows.Data.Pdf`. The Windows SDK metadata is required only when building the source; release users receive a single EXE.
+Keep these files together:
 
-Build with:
+```text
+HSPdf.exe
+pdfium.dll
+PDFium-LICENSES.txt
+PDFium-BUILD.txt
+```
+
+The GitHub release ZIP contains the complete runtime folder. If the EXE and DLL are downloaded separately, place them in the same directory.
+
+PDFium is built by CI from the official source repository at the exact revision in `vendor/pdfium/PDFIUM_COMMIT.txt`. HSPdf's build disables V8/JavaScript, XFA and Skia and produces a complete x64 native PDFium runtime through the small bridge in `vendor/pdfium/bridge`.
+
+Build HSPdf itself with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1
 ```
 
+Build the pinned PDFium runtime with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\BuildPdfium.ps1
+```
+
 ## Safety model
 
-HSPdf opens source PDFs with read access only. It does not edit, rename, delete or overwrite source files and does not write application state to `%TEMP%`, `%APPDATA%` or `%LOCALAPPDATA%`.
+HSPdf opens source PDFs read-only. It does not edit, rename, delete or overwrite source files and does not write application state to `%TEMP%`, `%APPDATA%` or `%LOCALAPPDATA%`.
 
-The right-side folder list only enumerates sibling `*.pdf` files in the opened document's directory. It does not recurse into subfolders. Attachment discovery is also read-only and bounded. Only attachments whose filename ends in `.pdf` are surfaced. Common `Filespec` metadata in ordinary PDF objects and Flate-compressed object streams is decoded in memory. Embedded attachment bytes are only decoded when needed for printing and are never automatically written to disk.
+The right-side folder list only enumerates sibling `*.pdf` files in the opened document's directory. It does not recurse into subfolders. PDFium's embedded-file API is used for attachment discovery; HSPdf surfaces only embedded files whose names end in `.pdf`. Attachment bytes are extracted only in memory when printing them.
 
-Printing renders pages on demand through `Windows.Data.Pdf` into the standard WPF/Windows print pipeline. The registered PDF application is not launched.
+Printing renders pages on demand through PDFium into the standard WPF/Windows print pipeline. The registered PDF application is not launched.
 
 ## Deliberate limitations
 
-No text selection/search, annotations, form editing or password entry. Unsupported attachment filter layouts fail closed rather than introducing a heavyweight PDF dependency. Password-protected or malformed PDFs fail with a short user-facing error instead of attempting recovery.
+The v0.4.0 UI still deliberately omits text search/selection, annotations, form editing and password entry. PDFium gives HSPdf a much stronger engine for adding such features later, but the engine migration does not add UI complexity merely because the underlying API can support it.

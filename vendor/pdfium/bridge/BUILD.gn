@@ -1,0 +1,6 @@
+shared_library("hspdf_pdfium") {
+  sources = [ "hspdf_bridge.cpp" ]
+  deps = [ "//:pdfium" ]
+  include_dirs = [ "//" ]
+  output_name = "pdfium"
+}
