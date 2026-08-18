@@ -43,16 +43,21 @@ foreach ($readme in $readmes) {
         if (-not (Test-Path $candidate)) {
             # README.chromium describes Chromium's dependency in general. With a
             # minimal PDFium checkout, conditionally disabled dependencies (for
-            # example V8-only dragonbox) keep their README/BUILD metadata while
-            # their nested source checkout is intentionally absent. Skip only
-            # that precise case; if the declared source root exists but its
-            # license file does not, fail closed so we never ship incomplete
-            # notices for a dependency that is actually present.
+            # example V8-only dragonbox) can leave an absent *or empty* checkout
+            # root behind. Skip only that precise case. If source content exists
+            # but the declared license does not, fail closed so we never ship
+            # incomplete notices for a dependency that is actually present.
             $pathParts = $licenseName -split '[\\/]'
             if ($pathParts.Count -gt 1) {
                 $declaredSourceRoot = Join-Path $readme.Directory.FullName $pathParts[0]
-                if (-not (Test-Path $declaredSourceRoot)) {
-                    Write-Host "Skipping license metadata for disabled dependency $dependencyName (checkout '$($pathParts[0])' is absent)."
+                $sourceRootMissing = -not (Test-Path $declaredSourceRoot)
+                $sourceRootEmpty = $false
+                if (-not $sourceRootMissing) {
+                    $sourceRootEmpty = -not [bool](Get-ChildItem -Path $declaredSourceRoot -Force -ErrorAction SilentlyContinue | Select-Object -First 1)
+                }
+
+                if ($sourceRootMissing -or $sourceRootEmpty) {
+                    Write-Host "Skipping license metadata for disabled dependency $dependencyName (checkout '$($pathParts[0])' is absent or empty)."
                     continue
                 }
             }
