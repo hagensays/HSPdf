@@ -37,7 +37,6 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
-    <Reference Include="ReachFramework" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -68,10 +67,12 @@
     <Compile Include="MainWindow.Features.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="PdfAttachmentScanner.cs" />
+    <Compile Include="Infrastructure\NaturalStringComparer.cs" />
+    <Compile Include="Infrastructure\VersionInfo.cs" />
     <Compile Include="Pdfium\PdfiumNative.cs" />
     <Compile Include="Pdfium\PdfiumDocument.cs" />
-    <Compile Include="Infrastructure\VersionInfo.cs" />
+    <Compile Include="Pdfium\PdfiumAttachmentDisplay.cs" />
+    <Compile Include="Pdfium\PdfiumPrintSession.cs" />
     <Compile Include="SuiteInfo.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
