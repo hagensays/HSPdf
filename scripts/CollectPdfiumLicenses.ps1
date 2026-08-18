@@ -39,7 +39,18 @@ foreach ($readme in $readmes) {
         Where-Object { $_ -and $_ -notmatch '^(NOT_SHIPPED|N/A|NONE)$' }
 
     foreach ($licenseName in $licenseNames) {
-        $candidate = Join-Path $readme.Directory.FullName $licenseName
+        # Chromium/PDFium README metadata uses //path/to/file to mean a path
+        # relative to the checkout root, not relative to the README directory.
+        # Resolve that syntax explicitly so declarations such as
+        # //third_party/zlib/LICENSE point at the actual shared license file.
+        $rootRelative = $licenseName -match '^[\\/]{2}'
+        if ($rootRelative) {
+            $relativeLicense = $licenseName -replace '^[\\/]+', ''
+            $candidate = Join-Path $root $relativeLicense
+        } else {
+            $candidate = Join-Path $readme.Directory.FullName $licenseName
+        }
+
         if (-not (Test-Path $candidate)) {
             # README.chromium describes Chromium's dependency in general. With a
             # minimal PDFium checkout, conditionally disabled dependencies (for
@@ -48,7 +59,7 @@ foreach ($readme in $readmes) {
             # but the declared license does not, fail closed so we never ship
             # incomplete notices for a dependency that is actually present.
             $pathParts = $licenseName -split '[\\/]'
-            if ($pathParts.Count -gt 1) {
+            if (-not $rootRelative -and $pathParts.Count -gt 1) {
                 $declaredSourceRoot = Join-Path $readme.Directory.FullName $pathParts[0]
                 $sourceRootMissing = -not (Test-Path $declaredSourceRoot)
                 $sourceRootEmpty = $false
@@ -67,7 +78,7 @@ foreach ($readme in $readmes) {
 
         $resolved = (Resolve-Path $candidate).Path
         if ($seen.Add($resolved)) {
-            $relative = $resolved.Substring($root.Length).TrimStart('\', '/')
+            $relative = $resolved.Substring($root.Length).TrimStart('\\', '/')
             $entries.Add([pscustomobject]@{ Name = $dependencyName; Path = $resolved; Source = $relative })
         }
     }
