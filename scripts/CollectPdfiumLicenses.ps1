@@ -67,7 +67,7 @@ foreach ($readme in $readmes) {
 
         $resolved = (Resolve-Path $candidate).Path
         if ($seen.Add($resolved)) {
-            $relative = $resolved.Substring($root.Length).TrimStart('\\', '/')
+            $relative = $resolved.Substring($root.Length).TrimStart('\', '/')
             $entries.Add([pscustomobject]@{ Name = $dependencyName; Path = $resolved; Source = $relative })
         }
     }
