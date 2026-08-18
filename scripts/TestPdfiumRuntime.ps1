@@ -40,6 +40,15 @@ public static class HSPdfPdfiumSmokeNative
 
     [DllImport("pdfium.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern int HSPDF_GetAttachmentCount(IntPtr document);
+
+    [DllImport("pdfium.dll", CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr HSPDF_CreatePrintSession();
+
+    [DllImport("pdfium.dll", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int HSPDF_GetModernPrintState(IntPtr session);
+
+    [DllImport("pdfium.dll", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void HSPDF_DestroyPrintSession(IntPtr session);
 }
 '@
 Add-Type -TypeDefinition $nativeSource -Language CSharp
@@ -69,6 +78,7 @@ $pdf = $encoding.GetBytes($builder.ToString())
 
 $pdfPin = [Runtime.InteropServices.GCHandle]::Alloc($pdf, [Runtime.InteropServices.GCHandleType]::Pinned)
 $document = [IntPtr]::Zero
+$printSession = [IntPtr]::Zero
 try {
     if ([HSPdfPdfiumSmokeNative]::HSPDF_Initialize() -eq 0) { throw 'PDFium initialization failed.' }
     $document = [HSPdfPdfiumSmokeNative]::HSPDF_OpenDocumentMemory($pdfPin.AddrOfPinnedObject(), [uint64]$pdf.LongLength)
@@ -91,10 +101,15 @@ try {
     } finally {
         $renderPin.Free()
     }
+
+    $printSession = [HSPdfPdfiumSmokeNative]::HSPDF_CreatePrintSession()
+    if ($printSession -eq [IntPtr]::Zero) { throw 'Modern-print session export failed.' }
+    if ([HSPdfPdfiumSmokeNative]::HSPDF_GetModernPrintState($printSession) -ne 0) { throw 'Fresh modern-print session must be idle.' }
 } finally {
+    if ($printSession -ne [IntPtr]::Zero) { [HSPdfPdfiumSmokeNative]::HSPDF_DestroyPrintSession($printSession) }
     if ($document -ne [IntPtr]::Zero) { [HSPdfPdfiumSmokeNative]::HSPDF_CloseDocument($document) }
     [HSPdfPdfiumSmokeNative]::HSPDF_Shutdown()
     $pdfPin.Free()
 }
 
-Write-Host 'PDFium native runtime smoke test passed.'
+Write-Host 'PDFium native runtime and modern-print exports smoke test passed.'
