@@ -48,8 +48,8 @@ For every code change:
 - Keep PDF rendering bounded: maximum requested zoom is 400%, render pixel counts are capped and the bitmap cache remains small.
 - Prefer one rendered page at a time. Do not eagerly rasterize an entire document for normal viewing.
 - All PDFium API access must remain serialized because PDFium's embedder API is not thread-safe. The native bridge owns this serialization.
-- Printing uses HSPdf's WPF/Windows print dialog and PDFium's printing render mode. Do not launch Adobe or another registered PDF application and do not create temporary print files.
-- `Alle drucken` uses natural filename order for top-level PDFs and places each embedded PDF attachment immediately after its parent PDF in the print sequence.
+- Printing uses the Windows modern print UI (`Windows.Graphics.Printing`) through the native `pdfium.dll` bridge. PDFium supplies document/attachment access and printing-mode page rendering. Do not reintroduce the WPF `PrintDialog`/`DocumentPaginator`, launch Adobe or another registered PDF application, or create temporary print files.
+- `Alle drucken` must open the Windows print UI before doing expensive PDF/attachment preparation. It uses natural filename order for top-level PDFs and places each embedded PDF attachment immediately after its parent PDF in the print sequence.
 - The folder companion list may enumerate only PDFs in the opened PDF's directory and must not recurse into subfolders.
 - Attachment discovery uses PDFium's embedded-file API and is limited to embedded files whose names end in `.pdf`.
 - Embedded PDF attachments may be extracted only in memory for display metadata and printing; never persist them to disk automatically.
