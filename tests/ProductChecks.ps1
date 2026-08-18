@@ -126,7 +126,7 @@ $ci = Get-Content (Join-Path $root '.github\workflows\ci.yml') -Raw
 if (-not $ci.Contains('Build PDFium x64') -or -not $ci.Contains('BuildPdfium.ps1')) { throw 'CI must build and smoke-test the pinned PDFium x64 runtime.' }
 
 $releaseWorkflow = Get-Content (Join-Path $root '.github\workflows\release.yml') -Raw
-foreach ($fragment in @("'Build PDFium x64'", 'BuildPdfium.ps1', 'pdfium.dll', 'PDFium-LICENSES.txt', 'PDFIUM-BUILD.txt', 'pdfium.dll.sha256', 'git push origin ":refs/heads/$branch"')) {
+foreach ($fragment in @("'Build PDFium x64'", 'BuildPdfium.ps1', 'pdfium.dll', 'PDFium-LICENSES.txt', 'PDFium-BUILD.txt', 'pdfium.dll.sha256', 'git push origin ":refs/heads/$branch"')) {
     if (-not $releaseWorkflow.Contains($fragment)) { throw "Release workflow PDFium invariant missing: $fragment" }
 }
 
