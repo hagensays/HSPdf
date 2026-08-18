@@ -28,9 +28,7 @@ namespace HSPdf.Pdfium
                 return string.Empty;
             }
 
-            return FormatTree(attachments
-                .Select(item => item.Name)
-                .OrderBy(name => name, NaturalStringComparer.Instance));
+            return FormatTree(attachments.Select(item => item.Name));
         }
 
         public static string FormatTree(IEnumerable<string> names)
@@ -113,12 +111,15 @@ namespace HSPdf.Pdfium
             }
         }
     }
+}
 
-    public sealed class PdfiumAttachmentTreeConverter : IValueConverter
+namespace HSPdf
+{
+    public sealed class PdfAttachmentTreeConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return PdfiumAttachmentDisplay.FormatFileTree(value as string);
+            return Pdfium.PdfiumAttachmentDisplay.FormatFileTree(value as string);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
