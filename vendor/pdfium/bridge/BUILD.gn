@@ -1,6 +1,17 @@
 shared_library("hspdf_pdfium") {
-  sources = [ "hspdf_bridge.cpp" ]
+  sources = [
+    "hspdf_bridge.cpp",
+    "hspdf_print.cpp",
+  ]
   deps = [ "//:pdfium" ]
   include_dirs = [ "//" ]
+  libs = [
+    "d2d1.lib",
+    "d3d11.lib",
+    "dxgi.lib",
+    "ole32.lib",
+    "runtimeobject.lib",
+    "windowscodecs.lib",
+  ]
   output_name = "pdfium"
 }
