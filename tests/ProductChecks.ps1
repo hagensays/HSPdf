@@ -94,7 +94,7 @@ if ($bridge.Contains('std::recursive_mutex') -or $bridge.Contains('catch (...)')
 $printBridgePath = Join-Path $root 'vendor\pdfium\bridge\hspdf_print.cpp'
 if (-not (Test-Path $printBridgePath)) { throw 'Native modern print bridge is missing.' }
 $printBridge = Get-Content $printBridgePath -Raw
-foreach ($fragment in @('IPrintManagerInterop', 'ShowPrintUIForWindowAsync', 'IPrintDocumentPageSource', 'IPrintPreviewPageCollection', 'IPrintPreviewDxgiPackageTarget', 'CreatePrintControl', 'HSPDF_OpenDocumentMemory', 'HSPDF_GetAttachmentCount', 'HSPDF_RenderPage', 'FPDF')) {
+foreach ($fragment in @('IPrintManagerInterop', 'ShowPrintUIForWindowAsync', 'IPrintDocumentPageSource', 'IPrintPreviewPageCollection', 'IPrintPreviewDxgiPackageTarget', 'CreatePrintControl', 'HSPDF_OpenDocumentMemory', 'HSPDF_GetAttachmentCount', 'HSPDF_RenderPage', 'printing_mode ? 1 : 0')) {
     if (-not $printBridge.Contains($fragment)) { throw "Native modern print invariant missing: $fragment" }
 }
 foreach ($forbidden in @('CreateProcess', 'ShellExecute', 'Path.GetTempPath')) {
@@ -110,7 +110,7 @@ $pin = (Get-Content (Join-Path $root 'vendor\pdfium\PDFIUM_COMMIT.txt') -Raw).Tr
 if ($pin -notmatch '^[0-9a-f]{40}$') { throw 'PDFium must be pinned to an exact 40-character commit.' }
 
 $pdfiumBuild = Get-Content (Join-Path $root 'scripts\BuildPdfium.ps1') -Raw
-foreach ($fragment in @('https://pdfium.googlesource.com/pdfium.git', 'checkout_configuration', 'minimal', 'target_cpu = "x64"', 'pdf_is_complete_lib = true', 'pdf_enable_v8 = false', 'pdf_enable_xfa = false', 'pdf_use_skia = false', 'autoninja -C out/HSPdf hspdf_pdfium', 'CollectPdfiumLicenses.ps1', 'VCRUNTIME|MSVCP')) {
+foreach ($fragment in @('https://pdfium.googlesource.com/pdfium.git', 'checkout_configuration', 'minimal', 'target_cpu = "x64"', 'pdf_is_complete_lib = true', 'pdf_enable_v8 = false', 'pdf_enable_xfa = false', 'pdf_use_skia = false', '//hspdf_bridge:hspdf_pdfium', 'autoninja -C out/HSPdf hspdf_pdfium', 'CollectPdfiumLicenses.ps1', 'VCRUNTIME|MSVCP')) {
     if (-not $pdfiumBuild.Contains($fragment)) { throw "PDFium build invariant missing: $fragment" }
 }
 
@@ -126,7 +126,7 @@ $ci = Get-Content (Join-Path $root '.github\workflows\ci.yml') -Raw
 if (-not $ci.Contains('Build PDFium x64') -or -not $ci.Contains('BuildPdfium.ps1')) { throw 'CI must build and smoke-test the pinned PDFium x64 runtime.' }
 
 $releaseWorkflow = Get-Content (Join-Path $root '.github\workflows\release.yml') -Raw
-foreach ($fragment in @("'Build PDFium x64'", 'BuildPdfium.ps1', 'pdfium.dll', 'PDFium-LICENSES.txt', 'PDFium-BUILD.txt', 'pdfium.dll.sha256', 'git push origin ":refs/heads/$branch"')) {
+foreach ($fragment in @("'Build PDFium x64'", 'BuildPdfium.ps1', 'pdfium.dll', 'PDFium-LICENSES.txt', 'PDFIUM-BUILD.txt', 'pdfium.dll.sha256', 'git push origin ":refs/heads/$branch"')) {
     if (-not $releaseWorkflow.Contains($fragment)) { throw "Release workflow PDFium invariant missing: $fragment" }
 }
 
