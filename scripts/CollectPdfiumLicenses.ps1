@@ -41,12 +41,28 @@ foreach ($readme in $readmes) {
     foreach ($licenseName in $licenseNames) {
         $candidate = Join-Path $readme.Directory.FullName $licenseName
         if (-not (Test-Path $candidate)) {
+            # README.chromium describes Chromium's dependency in general. With a
+            # minimal PDFium checkout, conditionally disabled dependencies (for
+            # example V8-only dragonbox) keep their README/BUILD metadata while
+            # their nested source checkout is intentionally absent. Skip only
+            # that precise case; if the declared source root exists but its
+            # license file does not, fail closed so we never ship incomplete
+            # notices for a dependency that is actually present.
+            $pathParts = $licenseName -split '[\\/]'
+            if ($pathParts.Count -gt 1) {
+                $declaredSourceRoot = Join-Path $readme.Directory.FullName $pathParts[0]
+                if (-not (Test-Path $declaredSourceRoot)) {
+                    Write-Host "Skipping license metadata for disabled dependency $dependencyName (checkout '$($pathParts[0])' is absent)."
+                    continue
+                }
+            }
+
             throw "Declared license file missing for $dependencyName`: $candidate"
         }
 
         $resolved = (Resolve-Path $candidate).Path
         if ($seen.Add($resolved)) {
-            $relative = $resolved.Substring($root.Length).TrimStart('\', '/')
+            $relative = $resolved.Substring($root.Length).TrimStart('\\', '/')
             $entries.Add([pscustomobject]@{ Name = $dependencyName; Path = $resolved; Source = $relative })
         }
     }
