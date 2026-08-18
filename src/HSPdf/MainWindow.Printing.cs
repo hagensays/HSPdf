@@ -197,46 +197,54 @@ namespace HSPdf
                     string path = pdfPaths[index];
                     StatusTextBlock.Text = string.Format("Druckfolge wird vorbereitet… {0}/{1}", index + 1, pdfPaths.Count);
 
-                    PdfiumDocument parentDocument = null;
+                    PdfiumDocument parentDocument;
                     try
                     {
                         parentDocument = await Task.Run(() => PdfiumDocument.Open(path));
-                        var parent = new PrintPdfHandle
-                        {
-                            Name = Path.GetFileName(path),
-                            Document = parentDocument,
-                            OwnsDocument = true
-                        };
-                        handles.Add(parent);
-
-                        IReadOnlyList<PdfiumAttachment> attachments = parentDocument.GetPdfAttachments(true)
-                            .OrderBy(item => item.Name, NaturalStringComparer.Instance)
-                            .ToArray();
-                        foreach (PdfiumAttachment attachment in attachments)
-                        {
-                            try
-                            {
-                                PdfiumDocument childDocument = await Task.Run(() => PdfiumDocument.Open(attachment.Data));
-                                handles.Add(new PrintPdfHandle
-                                {
-                                    Name = attachment.Name,
-                                    Document = childDocument,
-                                    OwnsDocument = true
-                                });
-                            }
-                            catch
-                            {
-                                skipped++;
-                            }
-                        }
                     }
                     catch
                     {
-                        if (parentDocument != null)
-                        {
-                            parentDocument.Dispose();
-                        }
                         skipped++;
+                        continue;
+                    }
+
+                    handles.Add(new PrintPdfHandle
+                    {
+                        Name = Path.GetFileName(path),
+                        Document = parentDocument,
+                        OwnsDocument = true
+                    });
+
+                    IReadOnlyList<PdfiumAttachment> attachments;
+                    try
+                    {
+                        attachments = await Task.Run(() =>
+                            (IReadOnlyList<PdfiumAttachment>)parentDocument.GetPdfAttachments(true)
+                                .OrderBy(item => item.Name, NaturalStringComparer.Instance)
+                                .ToArray());
+                    }
+                    catch
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    foreach (PdfiumAttachment attachment in attachments)
+                    {
+                        try
+                        {
+                            PdfiumDocument childDocument = await Task.Run(() => PdfiumDocument.Open(attachment.Data));
+                            handles.Add(new PrintPdfHandle
+                            {
+                                Name = attachment.Name,
+                                Document = childDocument,
+                                OwnsDocument = true
+                            });
+                        }
+                        catch
+                        {
+                            skipped++;
+                        }
                     }
                 }
 
