@@ -266,7 +266,12 @@ namespace HSPdf.Pdfium
 
         private static bool LooksLikePdf(byte[] data)
         {
-            int limit = Math.Min(data.Length - 4, 1024);
+            if (data == null || data.Length < 5)
+            {
+                return false;
+            }
+
+            int limit = Math.Min(data.Length - 5, 1024);
             for (int index = 0; index <= limit; index++)
             {
                 if (data[index] == (byte)'%' && data[index + 1] == (byte)'P' &&
