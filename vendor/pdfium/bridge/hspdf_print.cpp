@@ -70,6 +70,10 @@ namespace {
 constexpr unsigned long long kMaxEmbeddedPdfBytes = 128ull * 1024ull * 1024ull;
 constexpr double kMaxRenderPixels = 32000000.0;
 constexpr float kMaxPrintRenderDpi = 300.0f;
+constexpr foundation::AsyncStatus kAsyncStarted =
+    static_cast<foundation::AsyncStatus>(0);
+constexpr foundation::AsyncStatus kAsyncError =
+    static_cast<foundation::AsyncStatus>(3);
 
 enum PrintSessionState {
   kPrintSessionIdle = 0,
@@ -309,10 +313,10 @@ class PrintSession {
       return current;
     }
 
-    foundation::AsyncStatus async_status = foundation::AsyncStatus_Started;
+    foundation::AsyncStatus async_status = kAsyncStarted;
     if (SUCCEEDED(print_ui_async_->get_Status(&async_status)) &&
-        async_status != foundation::AsyncStatus_Started) {
-      if (async_status == foundation::AsyncStatus_Error) {
+        async_status != kAsyncStarted) {
+      if (async_status == kAsyncError) {
         HRESULT hr = E_FAIL;
         print_ui_async_->get_ErrorCode(&hr);
         error_.store(hr);
@@ -791,7 +795,7 @@ HRESULT ModernPrintDocumentSource::CreatePreviewSurface(
   if (FAILED(hr)) {
     return hr;
   }
-  return texture.As(surface);
+  return texture->QueryInterface(IID_PPV_ARGS(surface));
 }
 
 HRESULT ModernPrintDocumentSource::MakePage(UINT32 desired_job_page,
