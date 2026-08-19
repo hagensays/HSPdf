@@ -291,9 +291,9 @@ class PrintSession {
     title_.Set((title && *title) ? title : L"HSPdf");
     state_.store(kPrintSessionActive);
 
-    wrl::ComPtr<IInspectable> async_operation;
+    wrl::ComPtr<foundation::IAsyncOperation<boolean>> async_operation;
     hr = interop->ShowPrintUIForWindowAsync(
-        owner, __uuidof(IInspectable),
+        owner, __uuidof(foundation::IAsyncOperation<boolean>),
         reinterpret_cast<void**>(async_operation.GetAddressOf()));
     if (FAILED(hr)) {
       error_.store(hr);

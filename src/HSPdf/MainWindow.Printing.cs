@@ -130,13 +130,16 @@ namespace HSPdf
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 StatusTextBlock.Text = printAll
                     ? "Alle drucken fehlgeschlagen"
                     : "Drucken fehlgeschlagen";
                 MessageBox.Show(this,
-                    "Der moderne Windows-Druckdialog oder der PDFium-Druckauftrag ist fehlgeschlagen.",
+                    string.Format(
+                        "Der moderne Windows-Druckdialog oder der PDFium-Druckauftrag ist fehlgeschlagen.\n\nFehler: 0x{0:X8}\n{1}",
+                        ex.HResult,
+                        ex.Message),
                     "HSPdf", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             finally
