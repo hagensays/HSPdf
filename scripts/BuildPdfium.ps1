@@ -75,17 +75,14 @@ $bridgeSource = Join-Path $repoRoot 'vendor\pdfium\bridge'
 $bridgeTarget = Join-Path $pdfiumRoot 'hspdf_bridge'
 Copy-Item -Recurse -Force $bridgeSource $bridgeTarget
 
-# GN only emits targets reachable from the generated graph. Add one small root
-# target which links the official complete static :pdfium target into our DLL.
+# GN only emits targets reachable from the generated graph. Keep the checked-in
+# bridge BUILD.gn authoritative and expose it through one small root group.
 $rootBuildPath = Join-Path $pdfiumRoot 'BUILD.gn'
 $bridgeTargetText = @"
 
 # HSPdf reproducible embedder bridge. Injected by scripts/BuildPdfium.ps1.
-shared_library("hspdf_pdfium") {
-  sources = [ "hspdf_bridge/hspdf_bridge.cpp" ]
-  deps = [ ":pdfium" ]
-  include_dirs = [ "." ]
-  output_name = "pdfium"
+group("hspdf_pdfium") {
+  deps = [ "//hspdf_bridge:hspdf_pdfium" ]
 }
 "@
 Add-Content -Path $rootBuildPath -Value $bridgeTargetText -Encoding utf8

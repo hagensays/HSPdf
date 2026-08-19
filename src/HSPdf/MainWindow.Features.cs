@@ -1,3 +1,4 @@
+using HSPdf.Pdfium;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -85,7 +86,15 @@ namespace HSPdf
                 _featureDocumentPath = _documentPath;
                 CurrentPdfNameTextBlock.Text = Path.GetFileName(_documentPath);
                 CurrentPdfNameTextBlock.ToolTip = _documentPath;
-                CurrentPdfAttachmentTextBlock.Text = PdfAttachmentScanner.FormatTree(PdfAttachmentScanner.Scan(_documentPath));
+                try
+                {
+                    CurrentPdfAttachmentTextBlock.Text =
+                        PdfiumAttachmentDisplay.FormatTree(_document.GetPdfAttachments(false));
+                }
+                catch
+                {
+                    CurrentPdfAttachmentTextBlock.Text = string.Empty;
+                }
             }
 
             uint pageCount = _document.PageCount;
